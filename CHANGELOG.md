@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Text-to-Speech (REST)** via `GnaniTTSClient` — synchronous synthesis returning complete audio bytes from `POST /api/v1/tts/inference`.
+- **Text-to-Speech (Streaming)** via `GnaniTTSStreamClient` — SSE-based streaming that yields audio chunks as they are generated from `POST /api/v1/tts/sse`.
+- **Text-to-Speech (Realtime)** via `GnaniTTSRealtimeClient` — async WebSocket client that streams audio with the lowest latency over `wss://api.vachana.ai/api/v1/tts`.
+- `AudioConfig` dataclass for configuring sample rate, encoding, container, channels, sample width, and MP3 bitrate.
+- `SpeakerEmbedding` dataclass for voice cloning support (overrides the `voice` parameter).
+- `TTSAudioChunkEvent` and `TTSCompletedEvent` typed dataclasses for realtime stream events.
+- New `gnani.tts` sub-package with its own exception hierarchy: `GnaniTTSError`, `AuthenticationError`, `APIError`, `StreamConnectionError`, `StreamClosedError`, `StreamError`.
+- Constants: `SUPPORTED_VOICES`, `SUPPORTED_ENCODINGS`, `SUPPORTED_CONTAINERS`, `SUPPORTED_BITRATES`, `SUPPORTED_MODELS`, `DEFAULT_MODEL`.
+- `gnani/__init__.py` now re-exports both `gnani.stt` and `gnani.tts` sub-packages.
+
 ## [0.2.0] - 2026-04-16
 
 ### Added
@@ -37,5 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom exceptions: `GnaniSTTError`, `AuthenticationError`, `InvalidAudioError`, `APIError`.
 - GitHub Actions workflow for PyPI publishing.
 
+[Unreleased]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/releases/tag/v0.1.3
