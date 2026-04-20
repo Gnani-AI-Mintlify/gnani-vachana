@@ -1,9 +1,9 @@
 # gnani-vachana
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Official Python client for the **[Vachana Speech-to-Text API](https://docs.inya.ai/vachana/introduction/introduction)** by [Gnani.ai](https://gnani.ai). Transcribe audio in 10+ Indian languages via REST or real-time WebSocket streaming.
+Official Python client for **[Vachana Speech APIs](https://docs.inya.ai/vachana/introduction/introduction)** by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
 
-> **Vachana** is a production-ready speech-to-text API with automatic language detection and code-switching support for accurate multilingual transcriptions.
+> **Vachana** is a production-ready speech platform with high-accuracy STT and low-latency TTS for Indian languages, including multilingual and code-switching scenarios.
 
 ## Installation
 
@@ -15,7 +15,7 @@ Requires **Python 3.9+**.
 
 ## Quick Start
 
-### REST (file-based transcription)
+### STT REST (file-based transcription)
 
 ```python
 from gnani.stt import GnaniSTTClient
@@ -52,9 +52,40 @@ async def main():
 asyncio.run(main())
 ```
 
+### TTS REST (single response)
+
+```python
+from gnani.tts import GnaniTTSClient, AudioConfig
+
+client = GnaniTTSClient(api_key="your-api-key")
+audio = client.synthesize(
+    "नमस्ते, आप कैसे हैं?",
+    voice="sia",
+    audio_config=AudioConfig(sample_rate=44100, encoding="linear_pcm", container="wav"),
+)
+
+with open("tts_output.wav", "wb") as f:
+    f.write(audio)
+```
+
+### TTS Realtime (WebSocket)
+
+```python
+import asyncio
+from gnani.tts import GnaniTTSRealtimeClient
+
+async def main():
+    async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
+        with open("tts_realtime.wav", "wb") as f:
+            async for chunk in client.synthesize("Hello from Gnani TTS", voice="sia"):
+                f.write(chunk)
+
+asyncio.run(main())
+```
+
 ## Authentication
 
-### REST API
+### STT REST API
 
 The REST API uses header-based authentication. Every request requires three credentials:
 
@@ -64,13 +95,21 @@ The REST API uses header-based authentication. Every request requires three cred
 | `api_key`          | `X-API-Key-ID`      | Secret key for authentication      |
 | `user_id`          | `X-API-User-ID`     | Your user / organisation name      |
 
-### Realtime Streaming API
+### STT Realtime Streaming API
 
 The WebSocket streaming API requires a single API key:
 
 | Parameter   | Header         | Description                           |
 |-------------|----------------|---------------------------------------|
 | `api_key`   | `x-api-key-id` | API key identifier for authentication |
+
+### TTS API (REST, SSE, Realtime)
+
+All TTS interfaces require a single API key:
+
+| Parameter | Header         | Description                           |
+|-----------|----------------|---------------------------------------|
+| `api_key` | `X-API-Key-ID` | API key identifier for authentication |
 
 ### Obtaining Credentials
 
@@ -81,6 +120,9 @@ Email **[speechstack@gnani.ai](mailto:speechstack@gnani.ai)** with your name, co
 **Option 1 -- Constructor arguments:**
 
 ```python
+from gnani.stt import GnaniSTTClient, GnaniSTTStreamClient
+from gnani.tts import GnaniTTSClient, GnaniTTSRealtimeClient, GnaniTTSStreamClient
+
 # REST client
 client = GnaniSTTClient(
     organization_id="your-organization-id",
@@ -90,6 +132,11 @@ client = GnaniSTTClient(
 
 # Streaming client
 stream = GnaniSTTStreamClient(api_key="your-api-key")
+
+# TTS clients
+tts_rest = GnaniTTSClient(api_key="your-api-key")
+tts_stream = GnaniTTSStreamClient(api_key="your-api-key")
+tts_realtime = GnaniTTSRealtimeClient(api_key="your-api-key")
 ```
 
 **Option 2 -- Environment variables:**
@@ -102,8 +149,12 @@ export GNANI_USER_ID="your-user-id"
 ```
 
 ```python
+from gnani.stt import GnaniSTTClient, GnaniSTTStreamClient
+from gnani.tts import GnaniTTSClient
+
 client = GnaniSTTClient()           # picks up all three env vars
 stream = GnaniSTTStreamClient()     # picks up GNANI_API_KEY
+tts = GnaniTTSClient()              # picks up GNANI_API_KEY
 ```
 
 ## Supported Languages
@@ -307,6 +358,53 @@ async for event in stream:
     print(event.raw)  # dict with the complete server response
 ```
 
+## Text-to-Speech Usage
+
+### TTS REST
+
+```python
+from gnani.tts import GnaniTTSClient
+
+client = GnaniTTSClient(api_key="your-api-key")
+audio = client.synthesize("यह एक टेस्ट है", voice="sia")
+with open("tts_rest.wav", "wb") as f:
+    f.write(audio)
+```
+
+### TTS Streaming (SSE)
+
+```python
+from gnani.tts import GnaniTTSStreamClient
+
+client = GnaniTTSStreamClient(api_key="your-api-key")
+with open("tts_sse.wav", "wb") as f:
+    for chunk in client.synthesize_stream("Streaming TTS response", voice="raju"):
+        f.write(chunk)
+```
+
+### TTS Realtime (WebSocket)
+
+```python
+import asyncio
+from gnani.tts import GnaniTTSRealtimeClient
+
+async def main():
+    async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
+        audio = await client.synthesize_and_collect("Realtime TTS response", voice="neha")
+        with open("tts_realtime.wav", "wb") as f:
+            f.write(audio)
+
+asyncio.run(main())
+```
+
+### TTS Voices
+
+```python
+from gnani.tts import GnaniTTSClient
+
+print(GnaniTTSClient.supported_voices())
+```
+
 ## Audio Requirements
 
 ### REST API
@@ -406,6 +504,9 @@ Full API reference and guides are available at **[docs.inya.ai/vachana](https://
 
 - [STT REST API](https://docs.inya.ai/vachana/STT/speech-to-text)
 - [STT Realtime WebSocket](https://docs.inya.ai/vachana/STT/stt-websocket)
+- [TTS REST API](https://docs.inya.ai/vachana/TTS/tts-inference)
+- [TTS Streaming (SSE)](https://docs.inya.ai/vachana/TTS/tts-sse)
+- [TTS Realtime WebSocket](https://docs.inya.ai/vachana/TTS/tts-websocket)
 
 ## License
 
