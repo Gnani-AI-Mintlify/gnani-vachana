@@ -68,8 +68,8 @@ The REST API uses header-based authentication. Every request requires three cred
 
 The WebSocket streaming API requires a single API key:
 
-| Parameter   | Header         | Description                        |
-|-------------|----------------|------------------------------------|
+| Parameter   | Header         | Description                           |
+|-------------|----------------|---------------------------------------|
 | `api_key`   | `x-api-key-id` | API key identifier for authentication |
 
 ### Obtaining Credentials
@@ -112,14 +112,14 @@ stream = GnaniSTTStreamClient()     # picks up GNANI_API_KEY
 
 | Language        | Code          | Native Script |
 |-----------------|---------------|---------------|
-| Bengali         | `bn-IN`       | বাংলা         |
+| Bengali         | `bn-IN`       | বাংলা          |
 | English (India) | `en-IN`       | Latin         |
-| Gujarati        | `gu-IN`       | ગુજરાતી       |
-| Hindi           | `hi-IN`       | हिन्दी         |
+| Gujarati        | `gu-IN`       | ગુજરાતી         |
+| Hindi           | `hi-IN`       | हिन्दी           |
 | Kannada         | `kn-IN`       | ಕನ್ನಡ          |
-| Malayalam       | `ml-IN`       | മലയాളം        |
+| Malayalam       | `ml-IN`       | മലയാളം        |
 | Marathi         | `mr-IN`       | मराठी          |
-| Punjabi         | `pa-IN`       | ਪੰਜਾਬੀ        |
+| Punjabi         | `pa-IN`       | ਪੰਜਾਬੀ          |
 | Tamil           | `ta-IN`       | தமிழ்          |
 | Telugu          | `te-IN`       | తెలుగు         |
 
@@ -133,11 +133,11 @@ result = client.transcribe("meeting.wav", language_code="en-IN,hi-IN")
 
 All languages above plus experimental codes:
 
-| Language                     | Code             | Script                        |
-|------------------------------|------------------|-------------------------------|
-| Hinglish (Latin)             | `en-hi-IN-latn`  | Latin (experimental)          |
+| Language                     | Code             | Script                            |
+|------------------------------|------------------|-----------------------------------|
+| Hinglish (Latin)             | `en-hi-IN-latn`  | Latin (experimental)              |
 | Hinglish (Code-mixed)        | `en-hi-in-cm`    | Latin + Devanagari (experimental) |
-| Auto-detect                  | `AUTO_DETECT`     | All supported (experimental)  |
+| Auto-detect                  | `AUTO_DETECT`     | All supported (experimental)     |
 
 ```python
 from gnani.stt import GnaniSTTStreamClient
@@ -201,7 +201,7 @@ for code, name in GnaniSTTClient.supported_languages().items():
 
 ### Audio Format
 
-| Property    | 16 kHz                | 8 kHz                 |
+| Property    | 16 kHz                | 8 kHz               |
 |-------------|----------------------|----------------------|
 | Encoding    | PCM signed 16-bit LE | PCM signed 16-bit LE |
 | Sample Rate | 16,000 Hz            | 8,000 Hz             |
@@ -313,19 +313,19 @@ async for event in stream:
 
 | Constraint       | Value                                      |
 |------------------|--------------------------------------------|
-| Formats          | WAV, MP3, FLAC, OGG, M4A                  |
+| Formats          | WAV, MP3, FLAC, OGG, M4A                   |
 | Max duration     | 60 seconds                                 |
 | Channels         | Mono or stereo                             |
 | Sample rate      | Automatically converted to 16 kHz mono     |
 
 ### Realtime Streaming
 
-| Constraint       | Value                                                 |
-|------------------|-------------------------------------------------------|
-| Encoding         | Raw PCM, signed 16-bit little-endian                  |
-| Sample rate      | 16,000 Hz or 8,000 Hz                                |
-| Channels         | 1 (mono)                                              |
-| Frame size       | 1,024 bytes (512 samples)                             |
+| Constraint       | Value                                                  |
+|------------------|--------------------------------------------------------|
+| Encoding         | Raw PCM, signed 16-bit little-endian                   |
+| Sample rate      | 16,000 Hz or 8,000 Hz                                  |
+| Channels         | 1 (mono)                                               |
+| Frame size       | 1,024 bytes (512 samples)                              |
 | Pacing           | Send frames at real-time cadence for best VAD accuracy |
 
 ## Response Format
