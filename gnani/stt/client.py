@@ -393,6 +393,12 @@ def _parse_stream_message(data: str) -> StreamEvent:
             timestamp=payload.get("timestamp", ""),
             raw=payload,
         )
+    elif msg_type in ("speech_start", "speech_end", "vad_start", "vad_end"):
+        # Informational VAD lifecycle events — treat as processing signals.
+        return StreamProcessingEvent(
+            timestamp=payload.get("timestamp", ""),
+            raw=payload,
+        )
     else:
         return StreamErrorEvent(
             message=f"Unknown message type: {msg_type}",
@@ -489,7 +495,22 @@ class GnaniSTTStreamClient:
     @property
     def is_connected(self) -> bool:
         """``True`` if the WebSocket connection is open."""
-        return self._ws is not None and self._ws.open
+        if self._ws is None:
+            return False
+
+        # websockets<=11 exposed `.open`; newer versions expose `.state`.
+        if hasattr(self._ws, "open"):
+            return bool(getattr(self._ws, "open"))
+        if hasattr(self._ws, "closed"):
+            return not bool(getattr(self._ws, "closed"))
+
+        state = getattr(self._ws, "state", None)
+        state_name = getattr(state, "name", None)
+        if isinstance(state_name, str):
+            return state_name.upper() == "OPEN"
+
+        # Fallback for unknown client implementations.
+        return True
 
     @property
     def connected_config(self) -> StreamConnectedEvent | None:
