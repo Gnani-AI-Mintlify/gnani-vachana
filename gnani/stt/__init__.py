@@ -1,18 +1,50 @@
 """Gnani STT - Python client for Gnani's multilingual Speech-to-Text API."""
 
-from gnani.stt.client import GnaniSTTClient
+from gnani.stt.client import (
+    SAMPLE_RATE_8K,
+    SAMPLE_RATE_16K,
+    STREAM_CHUNK_BYTES,
+    STREAM_CHUNK_SAMPLES,
+    STREAM_SUPPORTED_LANGUAGES,
+    SUPPORTED_LANGUAGES,
+    GnaniSTTClient,
+    GnaniSTTStreamClient,
+    StreamConnectedEvent,
+    StreamErrorEvent,
+    StreamEvent,
+    StreamProcessingEvent,
+    StreamTranscriptEvent,
+)
 from gnani.stt.exceptions import (
-    GnaniSTTError,
-    AuthenticationError,
-    InvalidAudioError,
     APIError,
+    AuthenticationError,
+    GnaniSTTError,
+    InvalidAudioError,
+    StreamClosedError,
+    StreamConnectionError,
+    StreamError,
 )
 
-__version__ = "0.1.3"
+__version__ = "0.2.0"
 __all__ = [
+    "SAMPLE_RATE_8K",
+    "SAMPLE_RATE_16K",
+    "STREAM_CHUNK_BYTES",
+    "STREAM_CHUNK_SAMPLES",
+    "STREAM_SUPPORTED_LANGUAGES",
+    "SUPPORTED_LANGUAGES",
+    "APIError",
+    "AuthenticationError",
     "GnaniSTTClient",
     "GnaniSTTError",
-    "AuthenticationError",
+    "GnaniSTTStreamClient",
     "InvalidAudioError",
-    "APIError",
+    "StreamClosedError",
+    "StreamConnectedEvent",
+    "StreamConnectionError",
+    "StreamError",
+    "StreamErrorEvent",
+    "StreamEvent",
+    "StreamProcessingEvent",
+    "StreamTranscriptEvent",
 ]
