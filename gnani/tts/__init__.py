@@ -1,6 +1,7 @@
 """Gnani TTS - Python client for Gnani's multilingual Text-to-Speech API."""
 
 from gnani.tts.client import (
+    DEFAULT_LANGUAGE,
     DEFAULT_MODEL,
     SUPPORTED_BITRATES,
     SUPPORTED_CONTAINERS,
@@ -14,6 +15,7 @@ from gnani.tts.client import (
     SpeakerEmbedding,
     TTSAudioChunkEvent,
     TTSCompletedEvent,
+    TTSStartEvent,
     TTSStreamEvent,
 )
 from gnani.tts.exceptions import (
@@ -26,6 +28,7 @@ from gnani.tts.exceptions import (
 )
 
 __all__ = [
+    "DEFAULT_LANGUAGE",
     "DEFAULT_MODEL",
     "SUPPORTED_BITRATES",
     "SUPPORTED_CONTAINERS",
@@ -45,5 +48,6 @@ __all__ = [
     "StreamError",
     "TTSAudioChunkEvent",
     "TTSCompletedEvent",
+    "TTSStartEvent",
     "TTSStreamEvent",
 ]

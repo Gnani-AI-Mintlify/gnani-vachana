@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-04-27
+
+### Added
+
+- **`output_file` parameter** on all TTS `synthesize` methods — pass a file path (str or `Path`) to save the synthesised audio directly to disk.
+  - `GnaniTTSClient.synthesize()` — writes the full audio after download.
+  - `GnaniTTSStreamClient.synthesize_stream()` — streams each chunk to the file as it arrives.
+  - `GnaniTTSStreamClient.synthesize()` — writes the collected audio after all chunks are received.
+  - `GnaniTTSRealtimeClient.synthesize_and_collect()` — writes the collected audio after the WebSocket stream completes.
+- Internal `_save_audio` helper for consistent file writing with automatic parent-directory creation.
+- **`language` parameter** on `GnaniTTSRealtimeClient.synthesize()` and `synthesize_and_collect()` — specify the language/locale for WebSocket TTS (defaults to `"IND-IN"`).
+- `DEFAULT_LANGUAGE` constant (`"IND-IN"`) exported from `gnani.tts`.
+- **`synthesize_events()`** method on `GnaniTTSRealtimeClient` — yields typed `TTSStreamEvent` objects (`TTSStartEvent`, `TTSAudioChunkEvent`, `TTSCompletedEvent`) with full metadata (`request_id`, `chunk_index`, `is_final`).
+- `TTSStartEvent` dataclass for the stream-started notification (includes `request_id`).
+
+### Changed
+
+- **WebSocket TTS message parsing** — the server sends JSON text frames (`type: "start"`, `"audio"`, `"complete"`, `"error"`), not raw binary. `synthesize()` now decodes the base64 `data.audio` field from each `"audio"` frame and yields the raw bytes. Previously the code expected binary WebSocket frames and silently dropped all messages.
+- **WebSocket TTS request body** now always includes `voice` and `language` as top-level fields (previously `voice` was omitted when `speaker_embedding` was provided). The body now matches the `wss://api.vachana.ai/api/v1/tts` contract: `{ text, voice, language, model, audio_config }`.
+- `TTSAudioChunkEvent` now includes an `is_final` field.
+- `TTSCompletedEvent` now includes a `request_id` field.
+
 ## [0.2.1] - 2026-04-20
 
 ### Added
@@ -51,7 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom exceptions: `GnaniSTTError`, `AuthenticationError`, `InvalidAudioError`, `APIError`.
 - GitHub Actions workflow for PyPI publishing.
 
-[Unreleased]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/releases/tag/v0.1.3

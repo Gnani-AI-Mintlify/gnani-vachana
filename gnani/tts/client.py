@@ -8,6 +8,7 @@ import contextlib
 import json
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Union
 
 import requests
@@ -30,6 +31,7 @@ TTS_SSE_ENDPOINT = "/api/v1/tts/sse"
 TTS_WS_ENDPOINT = "/api/v1/tts"
 
 DEFAULT_MODEL = "vachana-voice-v2"
+DEFAULT_LANGUAGE = "IND-IN"
 
 SUPPORTED_VOICES = frozenset({"sia", "raju", "kanika", "nikita", "ravan", "simran", "karan", "neha"})
 SUPPORTED_ENCODINGS = frozenset({"linear_pcm", "oggopus"})
@@ -146,6 +148,17 @@ def _validate_model(model: str) -> None:
         )
 
 
+def _save_audio(audio: bytes, output_file: str | Path) -> Path:
+    """Write *audio* bytes to *output_file*, creating parent dirs if needed.
+
+    Returns the resolved :class:`~pathlib.Path` that was written.
+    """
+    dest = Path(output_file)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(audio)
+    return dest
+
+
 # ---------------------------------------------------------------------------
 # REST client
 # ---------------------------------------------------------------------------
@@ -209,6 +222,7 @@ class GnaniTTSClient:
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
+        output_file: str | Path | None = None,
     ) -> bytes:
         """Synthesise speech and return the full audio as bytes.
 
@@ -226,6 +240,9 @@ class GnaniTTSClient:
             Output audio configuration. Defaults to 44100 Hz WAV with linear PCM.
         speaker_embedding : SpeakerEmbedding, optional
             Voice cloning embedding. When provided, ``voice`` is ignored.
+        output_file : str or Path, optional
+            If provided, the synthesised audio is written to this file path.
+            Parent directories are created automatically.
 
         Returns
         -------
@@ -253,7 +270,10 @@ class GnaniTTSClient:
         if response.status_code != 200:
             raise APIError(response.status_code, response.text)
 
-        return response.content
+        audio = response.content
+        if output_file is not None:
+            _save_audio(audio, output_file)
+        return audio
 
     @staticmethod
     def supported_voices() -> list[str]:
@@ -267,33 +287,51 @@ class GnaniTTSClient:
 
 
 def _parse_sse_lines(response: requests.Response) -> Iterator[bytes]:
-    """Parse a Server-Sent Events stream and yield decoded audio chunks."""
-    event_type: str | None = None
+    """Parse the SSE TTS stream and yield decoded audio chunks.
 
+    The server sends newline-delimited JSON objects:
+
+    1. ``{"status": "streaming_started", ...}`` — start signal (skipped)
+    2. ``{"chunk_index": N, "audio": "<base64>", "is_final": false}`` — audio data
+    3. ``{"chunk_index": N, "audio": "", "is_final": true}`` — end marker
+
+    Chunks whose ``audio`` field is empty are silently skipped.
+    """
+    buf = ""
     for raw_line in response.iter_lines(decode_unicode=True):
         if not raw_line:
-            event_type = None
             continue
 
+        # Standard SSE prefix — strip it so we get at the JSON payload.
+        if raw_line.startswith("data:"):
+            raw_line = raw_line[len("data:"):].strip()
         if raw_line.startswith("event:"):
-            event_type = raw_line[len("event:"):].strip()
+            continue
 
-        elif raw_line.startswith("data:"):
-            data = raw_line[len("data:"):].strip()
+        buf += raw_line
+        try:
+            payload = json.loads(buf)
+        except json.JSONDecodeError:
+            continue
+        buf = ""
 
-            if event_type == "audio_chunk":
-                yield base64.b64decode(data)
+        if "error" in payload or payload.get("status") == "error":
+            raise StreamError(
+                payload.get("message", payload.get("error", json.dumps(payload)))
+            )
 
-            elif event_type == "completed":
-                return
+        if payload.get("status") == "streaming_started":
+            continue
 
-            elif event_type == "error":
-                try:
-                    payload = json.loads(data)
-                    msg = payload.get("message", data)
-                except (json.JSONDecodeError, AttributeError):
-                    msg = data
-                raise StreamError(msg)
+        if payload.get("is_final", False):
+            audio_b64 = payload.get("audio", "")
+            if audio_b64:
+                yield base64.b64decode(audio_b64)
+            return
+
+        audio_b64 = payload.get("audio", "")
+        if audio_b64:
+            yield base64.b64decode(audio_b64)
 
 
 class GnaniTTSStreamClient:
@@ -356,6 +394,7 @@ class GnaniTTSStreamClient:
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
+        output_file: str | Path | None = None,
     ) -> Iterator[bytes]:
         """Synthesise speech and yield audio chunks as they are generated.
 
@@ -371,6 +410,9 @@ class GnaniTTSStreamClient:
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
             Voice cloning embedding. When provided, ``voice`` is ignored.
+        output_file : str or Path, optional
+            If provided, each audio chunk is appended to this file as it
+            arrives. Parent directories are created automatically.
 
         Yields
         ------
@@ -401,7 +443,15 @@ class GnaniTTSStreamClient:
         if response.status_code != 200:
             raise APIError(response.status_code, response.text)
 
-        yield from _parse_sse_lines(response)
+        if output_file is not None:
+            dest = Path(output_file)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with dest.open("wb") as fh:
+                for chunk in _parse_sse_lines(response):
+                    fh.write(chunk)
+                    yield chunk
+        else:
+            yield from _parse_sse_lines(response)
 
     def synthesize(
         self,
@@ -411,13 +461,20 @@ class GnaniTTSStreamClient:
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
+        output_file: str | Path | None = None,
     ) -> bytes:
         """Synthesise speech and return the complete audio as bytes.
 
         Convenience wrapper around :meth:`synthesize_stream` that collects
         all chunks into a single ``bytes`` object.
+
+        Parameters
+        ----------
+        output_file : str or Path, optional
+            If provided, the complete audio is written to this file.
+            Parent directories are created automatically.
         """
-        return b"".join(
+        audio = b"".join(
             self.synthesize_stream(
                 text,
                 voice,
@@ -426,6 +483,9 @@ class GnaniTTSStreamClient:
                 speaker_embedding=speaker_embedding,
             )
         )
+        if output_file is not None:
+            _save_audio(audio, output_file)
+        return audio
 
     @staticmethod
     def supported_voices() -> list[str]:
@@ -439,6 +499,22 @@ class GnaniTTSStreamClient:
 
 
 @dataclass
+class TTSStartEvent:
+    """Emitted when the server begins streaming audio.
+
+    Attributes
+    ----------
+    request_id : str
+        Unique identifier for this TTS request.
+    message : str
+        Human-readable status message from the server.
+    """
+
+    request_id: str
+    message: str
+
+
+@dataclass
 class TTSAudioChunkEvent:
     """A binary audio chunk received from the TTS WebSocket stream.
 
@@ -448,10 +524,13 @@ class TTSAudioChunkEvent:
         Raw audio bytes for this chunk.
     chunk_index : int
         Zero-based index of this chunk within the response.
+    is_final : bool
+        ``True`` if this is the last audio-bearing chunk.
     """
 
     data: bytes
     chunk_index: int
+    is_final: bool = False
 
 
 @dataclass
@@ -460,14 +539,17 @@ class TTSCompletedEvent:
 
     Attributes
     ----------
+    request_id : str
+        Unique identifier for this TTS request.
     total_chunks : int
         Total number of audio chunks received.
     """
 
+    request_id: str
     total_chunks: int
 
 
-TTSStreamEvent = Union[TTSAudioChunkEvent, TTSCompletedEvent]
+TTSStreamEvent = Union[TTSStartEvent, TTSAudioChunkEvent, TTSCompletedEvent]
 
 
 class GnaniTTSRealtimeClient:
@@ -530,6 +612,7 @@ class GnaniTTSRealtimeClient:
         text: str,
         voice: str | None = "sia",
         *,
+        language: str = DEFAULT_LANGUAGE,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
@@ -546,12 +629,14 @@ class GnaniTTSRealtimeClient:
             The text to synthesise.
         voice : str, optional
             Pre-defined voice ID. Defaults to ``"sia"``.
+        language : str
+            Language / locale code for synthesis. Defaults to ``"IND-IN"``.
         model : str
             TTS model to use. Defaults to ``"vachana-voice-v2"``.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
-            Voice cloning embedding. When provided, ``voice`` is ignored.
+            Voice cloning embedding (included alongside ``voice``).
 
         Yields
         ------
@@ -567,7 +652,15 @@ class GnaniTTSRealtimeClient:
         _validate_voice(voice)
 
         cfg = audio_config or AudioConfig()
-        body = _build_request_body(text, voice, model, cfg, speaker_embedding)
+        body: dict[str, Any] = {
+            "text": text,
+            "voice": voice,
+            "language": language,
+            "model": model,
+            "audio_config": cfg.to_dict(),
+        }
+        if speaker_embedding is not None:
+            body["speaker_embedding"] = speaker_embedding.to_dict()
 
         try:
             ws = await websockets.connect(
@@ -587,6 +680,164 @@ class GnaniTTSRealtimeClient:
             async for message in ws:
                 if isinstance(message, bytes):
                     yield message
+                    continue
+
+                try:
+                    payload = json.loads(message)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+                msg_type = payload.get("type")
+
+                if msg_type == "audio":
+                    data = payload.get("data", {})
+                    audio_b64 = data.get("audio", "")
+                    if audio_b64:
+                        yield base64.b64decode(audio_b64)
+
+                elif msg_type == "complete":
+                    data = payload.get("data")
+                    if data is not None:
+                        audio_b64 = data.get("audio", "")
+                        if audio_b64:
+                            yield base64.b64decode(audio_b64)
+                    if "message" in payload:
+                        return
+
+                elif msg_type == "error":
+                    raise StreamError(
+                        payload.get("message", json.dumps(payload))
+                    )
+
+        except websockets.ConnectionClosed:
+            pass
+        finally:
+            with contextlib.suppress(Exception):
+                await ws.close()
+
+    async def synthesize_events(
+        self,
+        text: str,
+        voice: str | None = "sia",
+        *,
+        language: str = DEFAULT_LANGUAGE,
+        model: str = DEFAULT_MODEL,
+        audio_config: AudioConfig | None = None,
+        speaker_embedding: SpeakerEmbedding | None = None,
+    ) -> AsyncIterator[TTSStreamEvent]:
+        """Stream typed events for the given text via WebSocket.
+
+        Unlike :meth:`synthesize` (which yields raw ``bytes``), this method
+        yields :class:`TTSStartEvent`, :class:`TTSAudioChunkEvent`, and
+        :class:`TTSCompletedEvent` objects so callers can inspect metadata
+        like ``chunk_index`` and ``request_id``.
+
+        Parameters
+        ----------
+        text : str
+            The text to synthesise.
+        voice : str, optional
+            Pre-defined voice ID. Defaults to ``"sia"``.
+        language : str
+            Language / locale code. Defaults to ``"IND-IN"``.
+        model : str
+            TTS model to use. Defaults to ``"vachana-voice-v2"``.
+        audio_config : AudioConfig, optional
+            Output audio configuration.
+        speaker_embedding : SpeakerEmbedding, optional
+            Voice cloning embedding (included alongside ``voice``).
+
+        Yields
+        ------
+        TTSStreamEvent
+            One of :class:`TTSStartEvent`, :class:`TTSAudioChunkEvent`,
+            or :class:`TTSCompletedEvent`.
+        """
+        _validate_model(model)
+        _validate_voice(voice)
+
+        cfg = audio_config or AudioConfig()
+        body: dict[str, Any] = {
+            "text": text,
+            "voice": voice,
+            "language": language,
+            "model": model,
+            "audio_config": cfg.to_dict(),
+        }
+        if speaker_embedding is not None:
+            body["speaker_embedding"] = speaker_embedding.to_dict()
+
+        try:
+            ws = await websockets.connect(
+                self._ws_url,
+                additional_headers=self._build_headers(),
+                ping_interval=20,
+                ping_timeout=20,
+                close_timeout=10,
+            )
+        except Exception as exc:
+            raise StreamConnectionError(
+                f"Failed to connect to {self._ws_url}: {exc}"
+            ) from exc
+
+        chunk_count = 0
+        try:
+            await ws.send(json.dumps(body))
+            async for message in ws:
+                if isinstance(message, bytes):
+                    chunk_count += 1
+                    yield TTSAudioChunkEvent(
+                        data=message, chunk_index=chunk_count, is_final=False
+                    )
+                    continue
+
+                try:
+                    payload = json.loads(message)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+
+                msg_type = payload.get("type")
+
+                if msg_type == "start":
+                    yield TTSStartEvent(
+                        request_id=payload.get("request_id", ""),
+                        message=payload.get("message", ""),
+                    )
+
+                elif msg_type == "audio":
+                    data = payload.get("data", {})
+                    audio_b64 = data.get("audio", "")
+                    if audio_b64:
+                        chunk_count += 1
+                        yield TTSAudioChunkEvent(
+                            data=base64.b64decode(audio_b64),
+                            chunk_index=data.get("chunk_index", chunk_count),
+                            is_final=data.get("is_final", False),
+                        )
+
+                elif msg_type == "complete":
+                    data = payload.get("data")
+                    if data is not None:
+                        audio_b64 = data.get("audio", "")
+                        if audio_b64:
+                            chunk_count += 1
+                            yield TTSAudioChunkEvent(
+                                data=base64.b64decode(audio_b64),
+                                chunk_index=data.get("chunk_index", chunk_count),
+                                is_final=data.get("is_final", True),
+                            )
+                    if "message" in payload:
+                        yield TTSCompletedEvent(
+                            request_id=payload.get("request_id", ""),
+                            total_chunks=chunk_count,
+                        )
+                        return
+
+                elif msg_type == "error":
+                    raise StreamError(
+                        payload.get("message", json.dumps(payload))
+                    )
+
         except websockets.ConnectionClosed:
             pass
         finally:
@@ -598,14 +849,24 @@ class GnaniTTSRealtimeClient:
         text: str,
         voice: str | None = "sia",
         *,
+        language: str = DEFAULT_LANGUAGE,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
+        output_file: str | Path | None = None,
     ) -> bytes:
         """Synthesise speech and collect all audio chunks into a single bytes object.
 
         Convenience wrapper around :meth:`synthesize` that collects every
         chunk before returning.
+
+        Parameters
+        ----------
+        language : str
+            Language / locale code for synthesis. Defaults to ``"IND-IN"``.
+        output_file : str or Path, optional
+            If provided, the complete audio is written to this file.
+            Parent directories are created automatically.
 
         Returns
         -------
@@ -616,12 +877,16 @@ class GnaniTTSRealtimeClient:
         async for chunk in self.synthesize(
             text,
             voice,
+            language=language,
             model=model,
             audio_config=audio_config,
             speaker_embedding=speaker_embedding,
         ):
             chunks.append(chunk)
-        return b"".join(chunks)
+        audio = b"".join(chunks)
+        if output_file is not None:
+            _save_audio(audio, output_file)
+        return audio
 
     async def __aenter__(self) -> GnaniTTSRealtimeClient:
         return self
