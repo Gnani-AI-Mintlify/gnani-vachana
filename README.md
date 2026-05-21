@@ -159,57 +159,76 @@ tts = GnaniTTSClient()              # picks up GNANI_API_KEY
 
 ## Supported Languages
 
-### REST & Streaming API
+### STT Languages (Speech-to-Text) — 10 languages
+
+STT uses BCP-47 locale codes (e.g. `hi-IN`):
 
 | Language        | Code      | Native Script |
 |-----------------|-----------|---------------|
-| Assamese        | `as-IN`   | অসমীয়া         |
-| Bengali         | `bn-IN`   | বাংলা          |
-| Bodo            | `brx-IN`  | बड़ो            |
-| Dogri           | `doi-IN`  | डोगरी           |
 | English (India) | `en-IN`   | Latin         |
-| Gujarati        | `gu-IN`   | ગુજરાતી         |
 | Hindi           | `hi-IN`   | हिन्दी           |
-| Kannada         | `kn-IN`   | ಕನ್ನಡ          |
-| Kashmiri        | `ks-IN`   | كٲشُر           |
-| Konkani         | `kok-IN`  | कोंकणी          |
-| Maithili        | `mai-IN`  | मैथिली          |
-| Malayalam       | `ml-IN`   | മലയാളം        |
-| Manipuri        | `mni-IN`  | মৈতৈলোন্        |
-| Marathi         | `mr-IN`   | मराठी          |
-| Nepali          | `ne-IN`   | नेपाली          |
-| Odia            | `or-IN`   | ଓଡ଼ିଆ          |
-| Punjabi         | `pa-IN`   | ਪੰਜਾਬੀ          |
-| Sanskrit        | `sa-IN`   | संस्कृतम्        |
-| Santhali        | `sat-IN`  | ᱥᱟᱱᱛᱟᱲᱤ        |
-| Sindhi          | `sd-IN`   | سنڌي           |
+| Gujarati        | `gu-IN`   | ગુજરાતી         |
 | Tamil           | `ta-IN`   | தமிழ்          |
+| Kannada         | `kn-IN`   | ಕನ್ನಡ          |
 | Telugu          | `te-IN`   | తెలుగు         |
-| Urdu            | `ur-IN`   | اردو           |
+| Marathi         | `mr-IN`   | मराठी          |
+| Bengali         | `bn-IN`   | বাংলা          |
+| Malayalam       | `ml-IN`   | മലയാളം        |
+| Punjabi         | `pa-IN`   | ਪੰਜਾਬੀ          |
 
-For **multilingual / code-switching** audio (e.g. Hindi-English mix), pass a comma-separated code:
+**Code-switching** — pass comma-separated codes for multilingual audio:
 
 ```python
 result = client.transcribe("meeting.wav", language_code="en-IN,hi-IN")
 ```
 
-### Streaming-Only Experimental Codes
+**Streaming-only experimental codes:**
 
-| Language                     | Code             | Script                            |
+| Language                     | Code             | Notes                             |
 |------------------------------|------------------|-----------------------------------|
-| Hinglish (Latin)             | `en-hi-IN-latn`  | Latin (experimental)              |
+| Hinglish (Latin)             | `en-hi-IN-latn`  | Latin script (experimental)       |
 | Hinglish (Code-mixed)        | `en-hi-in-cm`    | Latin + Devanagari (experimental) |
 | Auto-detect                  | `AUTO_DETECT`     | All supported (experimental)     |
 
 ```python
 from gnani.stt import GnaniSTTStreamClient
 
-# Hinglish (Latin script)
 stream = GnaniSTTStreamClient(api_key="key", language_code="en-hi-IN-latn")
-
-# Auto-detect language
 stream = GnaniSTTStreamClient(api_key="key", language_code=GnaniSTTStreamClient.AUTO_DETECT)
 ```
+
+---
+
+### TTS Languages (Text-to-Speech) — 22 languages
+
+TTS uses ISO 639 language codes (e.g. `hi`, `bn`). Note: TTS does **not** use the `-IN` suffix.
+
+| Language   | Code  | Sample Voices               |
+|------------|-------|-----------------------------|
+| Assamese   | `as`  | Priya, Ankita, Arjun        |
+| Bengali    | `bn`  | Ananya, Barnali, Abhik      |
+| Bodo       | `brx` | Anamika, Basanti, Anil      |
+| Dogri      | `doi` | Asha, Bhavna, Ajay          |
+| Gujarati   | `gu`  | Avani, Bansari, Akshay      |
+| Hindi      | `hi`  | Aarav, Bharat, Deepak       |
+| Kannada    | `kn`  | Anitha, Bhavani, Aditya     |
+| Kashmiri   | `ks`  | Aafreen, Bilqees, Altaf     |
+| Konkani    | `kok` | Alka, Bindiya, Agnelo       |
+| Maithili   | `mai` | Archana, Binita, Amaresh    |
+| Malayalam  | `ml`  | Ambika, Bindhu, Abhilash    |
+| Manipuri   | `mni` | Achouba, Biren_M, Chaoba    |
+| Marathi    | `mr`  | Aparna, Bharati, Amol       |
+| Nepali     | `ne`  | Anita, Binita_N, Amar       |
+| Odia       | `or`  | Anuradha, Bijayalaxmi       |
+| Punjabi    | `pa`  | Amandeep, Balwinder         |
+| Sanskrit   | `sa`  | Akshara, Bhavika, Achyut    |
+| Santhali   | `sat` | Arjun_S, Birsa, Chand       |
+| Sindhi     | `sd`  | Ameena, Bhagwanti           |
+| Tamil      | `ta`  | Abinaya, Anbarasan          |
+| Telugu     | `te`  | Alekhya, Bhargavi, Adithya  |
+| Urdu       | `ur`  | Aiza, Bushra, Asad          |
+
+Plus 6 **primary voices** that work across languages: `Karan`, `Simran`, `Nara`, `Riya`, `Viraj`, `Raju`.
 
 ## REST Usage
 
