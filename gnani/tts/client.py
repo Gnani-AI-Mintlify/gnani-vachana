@@ -30,14 +30,98 @@ TTS_ENDPOINT = "/api/v1/tts/inference"
 TTS_SSE_ENDPOINT = "/api/v1/tts/sse"
 TTS_WS_ENDPOINT = "/api/v1/tts"
 
-DEFAULT_MODEL = "vachana-voice-v2"
+DEFAULT_MODEL = "vachana-voice-v3"
 DEFAULT_LANGUAGE = "IND-IN"
 
-SUPPORTED_VOICES = frozenset({"sia", "raju", "kanika", "nikita", "ravan", "simran", "karan", "neha"})
+# Legacy voices from vachana-voice-v2 (lowercase). Still supported for backward
+# compatibility — these work with model "vachana-voice-v2" only.
+LEGACY_V2_VOICES = frozenset({
+    "sia", "raju", "kanika", "nikita", "ravan", "simran", "karan", "neha",
+})
+
+# Voices for vachana-voice-v3 (capitalized). Some names overlap with legacy
+# voices (e.g. "Raju" vs "raju", "Karan" vs "karan", "Simran" vs "simran") —
+# the capitalized form targets v3, the lowercase form targets v2.
+V3_VOICES = frozenset({
+    # Primary voices
+    "Karan", "Simran", "Nara", "Riya", "Viraj", "Raju",
+    # Assamese
+    "Priya", "Ankita", "Deepa", "Meena", "Kavya", "Sonal", "Tara", "Lata",
+    "Arjun", "Bikash", "Chinmoy", "Dipak", "Gautam", "Hemant", "Ishan", "Jatin",
+    # Bengali
+    "Ananya", "Barnali", "Chandana", "Diya", "Ena", "Falguni", "Gopa", "Haimanti",
+    "Abhik", "Biren", "Chirag", "Debraj", "Eshan", "Farhan", "Gourab", "Hridoy",
+    # Bodo
+    "Anamika", "Basanti", "Champa", "Durga", "Elina", "Fulomati", "Gitika", "Hiranya",
+    "Anil", "Biswajit", "Chandan", "Dhiraj", "Ewlung", "Felu", "Gobinda", "Hirendra",
+    # Dogri
+    "Asha", "Bhavna", "Charu", "Devika", "Ekta", "Fiza", "Geeta", "Hansa",
+    "Ajay", "Baldev", "Chetan", "Dinesh", "Eknath", "Feroz", "Gulshan", "Harbans",
+    # Gujarati
+    "Avani", "Bansari", "Charmi", "Dhara", "Esha", "Falak", "Gargi", "Heena",
+    "Akshay", "Bhavin", "Chirag_G", "Dhruv", "Eshan_G", "Falgun", "Gaurav", "Hardik",
+    # Hindi
+    "Aarav", "Bharat", "Chandan_H", "Deepak", "Eklavya", "Firoz", "Girish", "Hitesh",
+    # Kannada
+    "Anitha", "Bhavani", "Chaitra", "Divya", "Eswari", "Geetha", "Hema", "Indira",
+    "Aditya", "Basavaraj", "Chethan", "Darshan", "Eswar", "Ganesh", "Harish", "Imran_K",
+    # Kashmiri
+    "Aafreen", "Bilqees", "Chaman", "Dilshada", "Farida", "Gulnara", "Hajra", "Iffat",
+    "Altaf", "Bashir", "Choudhary", "Dilnawaz", "Fayaz", "Ghulam", "Habib", "Imtiyaz",
+    # Konkani
+    "Alka", "Bindiya", "Chhaya", "Damayanti", "Filomena", "Greta", "Hermine", "Ines",
+    "Agnelo", "Bosco", "Cletus", "Domnic", "Filipe", "Gracian", "Herculano", "Ivo",
+    # Maithili
+    "Archana", "Binita", "Chandrakala", "Dharitri", "Fulwanti", "Ganga", "Hemlata", "Indumati",
+    "Amaresh", "Baidyanath", "Chandrashekhar", "Durgesh", "Fanindra", "Gangadhar", "Harihar", "Indranath",
+    # Malayalam
+    "Ambika", "Bindhu", "Chithra", "Deepthi", "Elizabath", "Gowri", "Haritha", "Indulekha",
+    "Abhilash", "Biju", "Dileep", "Eldho", "Faizal", "Govind", "Harikrishnan", "Ibrahim_M",
+    # Manipuri
+    "Achouba", "Biren_M", "Chaoba", "Dinamani", "Ibomcha", "Khomdon", "Laishram", "Moirangthem",
+    # Marathi
+    "Aparna", "Bharati", "Chaitali", "Dipali", "Ekata", "Gauri", "Hruta", "Isha",
+    "Amol", "Bhalchandra", "Dattatray", "Eknath_M", "Ganpat", "Harishchandra", "Ishwar", "Jagannath",
+    # Nepali
+    "Anita", "Binita_N", "Chameli", "Durga_N", "Kamala", "Laxmi", "Mina", "Nirmala",
+    "Amar", "Bikram", "Chandra", "Dipendra", "Kamal", "Laxman", "Mohan", "Narayan",
+    # Odia
+    "Anuradha", "Bijayalaxmi", "Chitralekha", "Debasmita", "Itishree", "Jayashree", "Kabita", "Lipsa",
+    "Asutosh", "Biswabhusan", "Chitta", "Debashish", "Itishri", "Jagabandhu", "Kartik", "Lingaraj",
+    # Punjabi
+    "Amandeep", "Balwinder", "Charanjit", "Daljit", "Gurpreet", "Harpreet", "Jaspreet", "Kirandeep",
+    "Amarjit", "Balkar", "Charanjeet", "Daljeet", "Gurjeet", "Harjeet", "Jagjeet", "Kulwant",
+    # Sanskrit
+    "Akshara", "Bhavika", "Chanda", "Devaki", "Ekata_S", "Gayatri", "Hemavati", "Indrani",
+    "Achyut", "Brahmanand", "Chidananda", "Devdutt", "Gangadhar_S", "Harinath", "Ishaan", "Jagdish",
+    # Santhali
+    "Arjun_S", "Birsa", "Chand", "Dhanu", "Haram", "Jitu", "Kalu", "Lako",
+    # Sindhi
+    "Ameena", "Bhagwanti", "Chandni", "Draupadi", "Feroza", "Gulabo", "Heera", "Indra",
+    # Tamil
+    "Abinaya", "Bhavani_T", "Chitra", "Dhivya", "Ezhilarasi", "Geetha_T", "Hemamalini", "Ilavarasi",
+    "Anbarasan", "Balamurugan", "Chelladurai", "Dhanasekaran", "Elumalai", "Gnanasekaran", "Hariharan_T", "Ilayaraja",
+    # Telugu
+    "Alekhya", "Bhargavi", "Charitha", "Deepthi_T", "Eswari_T", "Gayathri", "Harika", "Indumathi",
+    "Adithya", "Bhaskar", "Chaitanya", "Dhanunjay", "Eswar_T", "Gowtham", "Harsha", "Indradeep",
+    # Urdu
+    "Aiza", "Bushra", "Chandni_U", "Dilnoza", "Fareeha", "Gulshan_U", "Hina", "Iqra",
+    "Asad", "Babar", "Danish", "Ehsan", "Faisal", "Ghazanfar", "Hamza", "Imran",
+})
+
+# All supported voices — union of legacy v2 (lowercase) and v3 (capitalized).
+# Casing matters: "karan" → v2 model, "Karan" → v3 model.
+SUPPORTED_VOICES = LEGACY_V2_VOICES | V3_VOICES
+
+SUPPORTED_LANGUAGES = frozenset({
+    "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok", "mai",
+    "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
+})
+
 SUPPORTED_ENCODINGS = frozenset({"linear_pcm", "oggopus"})
 SUPPORTED_CONTAINERS = frozenset({"raw", "mp3", "wav", "mulaw", "ogg"})
 SUPPORTED_BITRATES = frozenset({"96k", "128k", "192k"})
-SUPPORTED_MODELS = frozenset({"vachana-voice-v2"})
+SUPPORTED_MODELS = frozenset({"vachana-voice-v3", "vachana-voice-v2", "vachana-voice-v1"})
 
 
 # ---------------------------------------------------------------------------
@@ -136,15 +220,15 @@ def _validate_voice(voice: str | None) -> None:
     if voice is not None and voice not in SUPPORTED_VOICES:
         raise ValueError(
             f"Unsupported voice '{voice}'. "
-            f"Choose from: {', '.join(sorted(SUPPORTED_VOICES))}"
+            f"v3 voices (capitalized): {', '.join(sorted(V3_VOICES)[:10])}... "
+            f"Legacy v2 voices (lowercase): {', '.join(sorted(LEGACY_V2_VOICES))}"
         )
 
 
 def _validate_model(model: str) -> None:
     if model not in SUPPORTED_MODELS:
         raise ValueError(
-            f"Unsupported model '{model}'. "
-            f"Choose from: {', '.join(sorted(SUPPORTED_MODELS))}"
+            f"Unsupported model '{model}'. Choose from: {', '.join(sorted(SUPPORTED_MODELS))}"
         )
 
 
@@ -187,7 +271,7 @@ class GnaniTTSClient:
     ::
 
         client = GnaniTTSClient(api_key="key")
-        audio_bytes = client.synthesize("नमस्ते, आप कैसे हैं?", voice="sia")
+        audio_bytes = client.synthesize("नमस्ते, आप कैसे हैं?", voice="Karan")
         with open("output.wav", "wb") as f:
             f.write(audio_bytes)
     """
@@ -217,7 +301,7 @@ class GnaniTTSClient:
     def synthesize(
         self,
         text: str,
-        voice: str | None = "sia",
+        voice: str | None = "Karan",
         *,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
@@ -231,9 +315,9 @@ class GnaniTTSClient:
         text : str
             The text to synthesise.
         voice : str, optional
-            Pre-defined voice ID. One of ``"sia"``, ``"raju"``, ``"kanika"``,
-            ``"nikita"``, ``"ravan"``, ``"simran"``, ``"karan"``, ``"neha"``.
-            Ignored when ``speaker_embedding`` is provided. Defaults to ``"sia"``.
+            Pre-defined voice ID (e.g. ``"Karan"``, ``"Simran"``, ``"Riya"``).
+            See ``SUPPORTED_VOICES`` for the full list.
+            Ignored when ``speaker_embedding`` is provided. Defaults to ``"Karan"``.
         model : str
             TTS model to use. Defaults to ``"vachana-voice-v2"``.
         audio_config : AudioConfig, optional
@@ -356,12 +440,12 @@ class GnaniTTSStreamClient:
 
         client = GnaniTTSStreamClient(api_key="key")
         with open("output.wav", "wb") as f:
-            for chunk in client.synthesize_stream("Hello, world!", voice="sia"):
+            for chunk in client.synthesize_stream("Hello, world!", voice="Karan"):
                 f.write(chunk)
 
     Collect all chunks into a single bytes object::
 
-        audio = client.synthesize("Hello!", voice="sia")
+        audio = client.synthesize("Hello!", voice="Karan")
     """
 
     def __init__(
@@ -389,7 +473,7 @@ class GnaniTTSStreamClient:
     def synthesize_stream(
         self,
         text: str,
-        voice: str | None = "sia",
+        voice: str | None = "Karan",
         *,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
@@ -403,7 +487,7 @@ class GnaniTTSStreamClient:
         text : str
             The text to synthesise.
         voice : str, optional
-            Pre-defined voice ID. Defaults to ``"sia"``.
+            Pre-defined voice ID. Defaults to ``"Karan"``.
         model : str
             TTS model to use. Defaults to ``"vachana-voice-v2"``.
         audio_config : AudioConfig, optional
@@ -456,7 +540,7 @@ class GnaniTTSStreamClient:
     def synthesize(
         self,
         text: str,
-        voice: str | None = "sia",
+        voice: str | None = "Karan",
         *,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
@@ -574,14 +658,14 @@ class GnaniTTSRealtimeClient:
         async with GnaniTTSRealtimeClient(api_key="key") as client:
             with open("output.wav", "wb") as f:
                 async for chunk in client.synthesize(
-                    "नमस्ते, आप कैसे हैं?", voice="sia"
+                    "नमस्ते, आप कैसे हैं?", voice="Karan"
                 ):
                     f.write(chunk)
 
     Collect full audio in one call::
 
         async with GnaniTTSRealtimeClient(api_key="key") as client:
-            audio = await client.synthesize_and_collect("Hello!", voice="sia")
+            audio = await client.synthesize_and_collect("Hello!", voice="Karan")
     """
 
     def __init__(
@@ -610,7 +694,7 @@ class GnaniTTSRealtimeClient:
     async def synthesize(
         self,
         text: str,
-        voice: str | None = "sia",
+        voice: str | None = "Karan",
         *,
         language: str = DEFAULT_LANGUAGE,
         model: str = DEFAULT_MODEL,
@@ -628,7 +712,7 @@ class GnaniTTSRealtimeClient:
         text : str
             The text to synthesise.
         voice : str, optional
-            Pre-defined voice ID. Defaults to ``"sia"``.
+            Pre-defined voice ID. Defaults to ``"Karan"``.
         language : str
             Language / locale code for synthesis. Defaults to ``"IND-IN"``.
         model : str
@@ -718,7 +802,7 @@ class GnaniTTSRealtimeClient:
     async def synthesize_events(
         self,
         text: str,
-        voice: str | None = "sia",
+        voice: str | None = "Karan",
         *,
         language: str = DEFAULT_LANGUAGE,
         model: str = DEFAULT_MODEL,
@@ -737,7 +821,7 @@ class GnaniTTSRealtimeClient:
         text : str
             The text to synthesise.
         voice : str, optional
-            Pre-defined voice ID. Defaults to ``"sia"``.
+            Pre-defined voice ID. Defaults to ``"Karan"``.
         language : str
             Language / locale code. Defaults to ``"IND-IN"``.
         model : str
@@ -847,7 +931,7 @@ class GnaniTTSRealtimeClient:
     async def synthesize_and_collect(
         self,
         text: str,
-        voice: str | None = "sia",
+        voice: str | None = "Karan",
         *,
         language: str = DEFAULT_LANGUAGE,
         model: str = DEFAULT_MODEL,

@@ -27,35 +27,63 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 SUPPORTED_LANGUAGES = {
-    "en-IN": "English (India)",
-    "hi-IN": "Hindi",
-    "gu-IN": "Gujarati",
-    "ta-IN": "Tamil",
-    "kn-IN": "Kannada",
-    "te-IN": "Telugu",
-    "mr-IN": "Marathi",
+    "as-IN": "Assamese",
     "bn-IN": "Bengali",
+    "brx-IN": "Bodo",
+    "doi-IN": "Dogri",
+    "en-IN": "English (India)",
+    "gu-IN": "Gujarati",
+    "hi-IN": "Hindi",
+    "kn-IN": "Kannada",
+    "ks-IN": "Kashmiri",
+    "kok-IN": "Konkani",
+    "mai-IN": "Maithili",
     "ml-IN": "Malayalam",
+    "mni-IN": "Manipuri",
+    "mr-IN": "Marathi",
+    "ne-IN": "Nepali",
+    "or-IN": "Odia",
     "pa-IN": "Punjabi",
+    "sa-IN": "Sanskrit",
+    "sat-IN": "Santhali",
+    "sd-IN": "Sindhi",
+    "ta-IN": "Tamil",
+    "te-IN": "Telugu",
+    "ur-IN": "Urdu",
     "en-IN,hi-IN": "English-Hindi",
 }
 
 STREAM_SUPPORTED_LANGUAGES = {
+    "as-IN": "Assamese",
     "bn-IN": "Bengali",
+    "brx-IN": "Bodo",
+    "doi-IN": "Dogri",
     "en-IN": "English (India)",
     "gu-IN": "Gujarati",
     "hi-IN": "Hindi",
     "kn-IN": "Kannada",
+    "ks-IN": "Kashmiri",
+    "kok-IN": "Konkani",
+    "mai-IN": "Maithili",
     "ml-IN": "Malayalam",
+    "mni-IN": "Manipuri",
     "mr-IN": "Marathi",
+    "ne-IN": "Nepali",
+    "or-IN": "Odia",
     "pa-IN": "Punjabi",
+    "sa-IN": "Sanskrit",
+    "sat-IN": "Santhali",
+    "sd-IN": "Sindhi",
     "ta-IN": "Tamil",
     "te-IN": "Telugu",
+    "ur-IN": "Urdu",
     "en-hi-IN-latn": "Hinglish (Latin script, experimental)",
     "en-hi-in-cm": "Hinglish (Code-mixed, experimental)",
 }
 
-AUTO_DETECT_LANGUAGES = "en-IN,hi-IN,ta-IN,te-IN,kn-IN,ml-IN,gu-IN,mr-IN,bn-IN,pa-IN"
+AUTO_DETECT_LANGUAGES = ",".join(
+    k for k in STREAM_SUPPORTED_LANGUAGES if not k.startswith("en-hi")
+)
 
 SUPPORTED_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
 

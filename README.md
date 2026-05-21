@@ -3,7 +3,7 @@
 
 Official Python client for **[Vachana Speech APIs](https://docs.inya.ai/vachana/introduction/introduction)** by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
 
-> **Vachana** is a production-ready speech platform with high-accuracy STT and low-latency TTS for Indian languages, including multilingual and code-switching scenarios.
+> **Vachana** is a production-ready speech platform with high-accuracy STT and low-latency TTS for 22+ Indian languages, including 250+ voices, multilingual and code-switching scenarios.
 
 ## Installation
 
@@ -60,7 +60,7 @@ from gnani.tts import GnaniTTSClient, AudioConfig
 client = GnaniTTSClient(api_key="your-api-key")
 audio = client.synthesize(
     "नमस्ते, आप कैसे हैं?",
-    voice="sia",
+    voice="Karan",
     audio_config=AudioConfig(sample_rate=44100, encoding="linear_pcm", container="wav"),
 )
 
@@ -77,7 +77,7 @@ from gnani.tts import GnaniTTSRealtimeClient
 async def main():
     async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
         with open("tts_realtime.wav", "wb") as f:
-            async for chunk in client.synthesize("Hello from Gnani TTS", voice="sia"):
+            async for chunk in client.synthesize("Hello from Gnani TTS", voice="Karan"):
                 f.write(chunk)
 
 asyncio.run(main())
@@ -159,20 +159,33 @@ tts = GnaniTTSClient()              # picks up GNANI_API_KEY
 
 ## Supported Languages
 
-### REST API
+### REST & Streaming API
 
-| Language        | Code          | Native Script |
-|-----------------|---------------|---------------|
-| Bengali         | `bn-IN`       | বাংলা          |
-| English (India) | `en-IN`       | Latin         |
-| Gujarati        | `gu-IN`       | ગુજરાતી         |
-| Hindi           | `hi-IN`       | हिन्दी           |
-| Kannada         | `kn-IN`       | ಕನ್ನಡ          |
-| Malayalam       | `ml-IN`       | മലയാളം        |
-| Marathi         | `mr-IN`       | मराठी          |
-| Punjabi         | `pa-IN`       | ਪੰਜਾਬੀ          |
-| Tamil           | `ta-IN`       | தமிழ்          |
-| Telugu          | `te-IN`       | తెలుగు         |
+| Language        | Code      | Native Script |
+|-----------------|-----------|---------------|
+| Assamese        | `as-IN`   | অসমীয়া         |
+| Bengali         | `bn-IN`   | বাংলা          |
+| Bodo            | `brx-IN`  | बड़ो            |
+| Dogri           | `doi-IN`  | डोगरी           |
+| English (India) | `en-IN`   | Latin         |
+| Gujarati        | `gu-IN`   | ગુજરાતી         |
+| Hindi           | `hi-IN`   | हिन्दी           |
+| Kannada         | `kn-IN`   | ಕನ್ನಡ          |
+| Kashmiri        | `ks-IN`   | كٲشُر           |
+| Konkani         | `kok-IN`  | कोंकणी          |
+| Maithili        | `mai-IN`  | मैथिली          |
+| Malayalam       | `ml-IN`   | മലയാളം        |
+| Manipuri        | `mni-IN`  | মৈতৈলোন্        |
+| Marathi         | `mr-IN`   | मराठी          |
+| Nepali          | `ne-IN`   | नेपाली          |
+| Odia            | `or-IN`   | ଓଡ଼ିଆ          |
+| Punjabi         | `pa-IN`   | ਪੰਜਾਬੀ          |
+| Sanskrit        | `sa-IN`   | संस्कृतम्        |
+| Santhali        | `sat-IN`  | ᱥᱟᱱᱛᱟᱲᱤ        |
+| Sindhi          | `sd-IN`   | سنڌي           |
+| Tamil           | `ta-IN`   | தமிழ்          |
+| Telugu          | `te-IN`   | తెలుగు         |
+| Urdu            | `ur-IN`   | اردو           |
 
 For **multilingual / code-switching** audio (e.g. Hindi-English mix), pass a comma-separated code:
 
@@ -180,9 +193,7 @@ For **multilingual / code-switching** audio (e.g. Hindi-English mix), pass a com
 result = client.transcribe("meeting.wav", language_code="en-IN,hi-IN")
 ```
 
-### Realtime Streaming API
-
-All languages above plus experimental codes:
+### Streaming-Only Experimental Codes
 
 | Language                     | Code             | Script                            |
 |------------------------------|------------------|-----------------------------------|
@@ -366,7 +377,7 @@ async for event in stream:
 from gnani.tts import GnaniTTSClient
 
 client = GnaniTTSClient(api_key="your-api-key")
-audio = client.synthesize("यह एक टेस्ट है", voice="sia")
+audio = client.synthesize("यह एक टेस्ट है", voice="Karan")
 with open("tts_rest.wav", "wb") as f:
     f.write(audio)
 ```
@@ -378,7 +389,7 @@ from gnani.tts import GnaniTTSStreamClient
 
 client = GnaniTTSStreamClient(api_key="your-api-key")
 with open("tts_sse.wav", "wb") as f:
-    for chunk in client.synthesize_stream("Streaming TTS response", voice="raju"):
+    for chunk in client.synthesize_stream("Streaming TTS response", voice="Raju"):
         f.write(chunk)
 ```
 
@@ -390,7 +401,7 @@ from gnani.tts import GnaniTTSRealtimeClient
 
 async def main():
     async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
-        audio = await client.synthesize_and_collect("Realtime TTS response", voice="neha")
+        audio = await client.synthesize_and_collect("Realtime TTS response", voice="Simran")
         with open("tts_realtime.wav", "wb") as f:
             f.write(audio)
 
@@ -399,11 +410,19 @@ asyncio.run(main())
 
 ### TTS Voices
 
+250+ voices are available across 22 Indian languages. List them programmatically:
+
 ```python
 from gnani.tts import GnaniTTSClient
 
 print(GnaniTTSClient.supported_voices())
 ```
+
+**v3 voices** (capitalized): `Karan`, `Simran`, `Nara`, `Riya`, `Viraj`, `Raju`, plus 250+ language-specific voices (e.g. `Aarav` for Hindi, `Priya` for Assamese, `Ananya` for Bengali).
+
+**Legacy v2 voices** (lowercase, still supported): `sia`, `raju`, `kanika`, `nikita`, `ravan`, `simran`, `karan`, `neha`.
+
+> **Casing matters:** `"karan"` (lowercase) uses `vachana-voice-v2`, while `"Karan"` (capitalized) uses `vachana-voice-v3`. Some names overlap between models — the casing determines which model is targeted.
 
 ## Audio Requirements
 
