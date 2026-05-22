@@ -706,7 +706,7 @@ class GnaniTTSRealtimeClient:
             await ws.send(json.dumps(body))
             async for message in ws:
                 if isinstance(message, bytes):
-                    yield message
+                    yield _strip_wav_header(message)
                     continue
 
                 try:
@@ -720,16 +720,15 @@ class GnaniTTSRealtimeClient:
                     data = payload.get("data", {})
                     audio_b64 = data.get("audio", "")
                     if audio_b64:
-                        yield base64.b64decode(audio_b64)
+                        yield _strip_wav_header(base64.b64decode(audio_b64))
 
                 elif msg_type == "complete":
                     data = payload.get("data")
                     if data is not None:
                         audio_b64 = data.get("audio", "")
                         if audio_b64:
-                            yield base64.b64decode(audio_b64)
-                    if "message" in payload:
-                        return
+                            yield _strip_wav_header(base64.b64decode(audio_b64))
+                    return
 
                 elif msg_type == "error":
                     raise StreamError(
@@ -814,7 +813,8 @@ class GnaniTTSRealtimeClient:
                 if isinstance(message, bytes):
                     chunk_count += 1
                     yield TTSAudioChunkEvent(
-                        data=message, chunk_index=chunk_count, is_final=False
+                        data=_strip_wav_header(message),
+                        chunk_index=chunk_count, is_final=False,
                     )
                     continue
 
@@ -837,7 +837,7 @@ class GnaniTTSRealtimeClient:
                     if audio_b64:
                         chunk_count += 1
                         yield TTSAudioChunkEvent(
-                            data=base64.b64decode(audio_b64),
+                            data=_strip_wav_header(base64.b64decode(audio_b64)),
                             chunk_index=data.get("chunk_index", chunk_count),
                             is_final=data.get("is_final", False),
                         )
@@ -849,16 +849,15 @@ class GnaniTTSRealtimeClient:
                         if audio_b64:
                             chunk_count += 1
                             yield TTSAudioChunkEvent(
-                                data=base64.b64decode(audio_b64),
+                                data=_strip_wav_header(base64.b64decode(audio_b64)),
                                 chunk_index=data.get("chunk_index", chunk_count),
                                 is_final=data.get("is_final", True),
                             )
-                    if "message" in payload:
-                        yield TTSCompletedEvent(
-                            request_id=payload.get("request_id", ""),
-                            total_chunks=chunk_count,
-                        )
-                        return
+                    yield TTSCompletedEvent(
+                        request_id=payload.get("request_id", ""),
+                        total_chunks=chunk_count,
+                    )
+                    return
 
                 elif msg_type == "error":
                     raise StreamError(
@@ -882,10 +881,10 @@ class GnaniTTSRealtimeClient:
         speaker_embedding: SpeakerEmbedding | None = None,
         output_file: str | Path | None = None,
     ) -> bytes:
-        """Synthesise speech and collect all audio chunks into a single bytes object.
+        """Synthesise speech and return a complete valid WAV file.
 
-        Convenience wrapper around :meth:`synthesize` that collects every
-        chunk before returning.
+        Convenience wrapper around :meth:`synthesize` that collects raw
+        PCM chunks and wraps them in a single WAV header.
 
         Parameters
         ----------
@@ -898,8 +897,9 @@ class GnaniTTSRealtimeClient:
         Returns
         -------
         bytes
-            The complete synthesised audio.
+            The complete synthesised audio as a valid WAV file.
         """
+        cfg = audio_config or AudioConfig()
         chunks: list[bytes] = []
         async for chunk in self.synthesize(
             text,
@@ -910,7 +910,10 @@ class GnaniTTSRealtimeClient:
             speaker_embedding=speaker_embedding,
         ):
             chunks.append(chunk)
-        audio = b"".join(chunks)
+        pcm = b"".join(chunks)
+        audio = _build_wav_header(
+            len(pcm), cfg.sample_rate, cfg.num_channels, cfg.sample_width,
+        ) + pcm
         if output_file is not None:
             _save_audio(audio, output_file)
         return audio

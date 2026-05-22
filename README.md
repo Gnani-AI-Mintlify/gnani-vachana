@@ -68,7 +68,16 @@ with open("tts_output.wav", "wb") as f:
     f.write(audio)
 ```
 
-### TTS Realtime (WebSocket)
+### TTS SSE Streaming (lower latency)
+
+```python
+from gnani.tts import GnaniTTSStreamClient
+
+client = GnaniTTSStreamClient(api_key="your-api-key")
+audio = client.synthesize("Hello from Gnani TTS", voice="Karan", output_file="tts_sse.wav")
+```
+
+### TTS Realtime WebSocket (lowest latency)
 
 ```python
 import asyncio
@@ -76,9 +85,9 @@ from gnani.tts import GnaniTTSRealtimeClient
 
 async def main():
     async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
-        with open("tts_realtime.wav", "wb") as f:
-            async for chunk in client.synthesize("Hello from Gnani TTS", voice="Karan"):
-                f.write(chunk)
+        audio = await client.synthesize_and_collect(
+            "Hello from Gnani TTS", voice="Karan", output_file="tts_realtime.wav",
+        )
 
 asyncio.run(main())
 ```
@@ -400,28 +409,56 @@ with open("tts_rest.wav", "wb") as f:
 
 ### TTS Streaming (SSE)
 
+Lower latency than REST — audio is streamed via Server-Sent Events.
+
 ```python
-from gnani.tts import GnaniTTSStreamClient
+from gnani.tts import GnaniTTSStreamClient, AudioConfig
 
 client = GnaniTTSStreamClient(api_key="your-api-key")
-with open("tts_sse.wav", "wb") as f:
-    for chunk in client.synthesize_stream("Streaming TTS response", voice="Raju"):
-        f.write(chunk)
+
+# synthesize() collects all SSE chunks and returns a valid WAV file
+audio = client.synthesize(
+    "Streaming TTS response",
+    voice="Raju",
+    audio_config=AudioConfig(sample_rate=16000, encoding="linear_pcm", container="wav"),
+    output_file="tts_sse.wav",
+)
+```
+
+For raw PCM streaming (e.g. real-time playback), use `synthesize_stream()`:
+
+```python
+for pcm_chunk in client.synthesize_stream("Hello!", voice="Karan"):
+    play_audio(pcm_chunk)  # raw PCM, no WAV header
 ```
 
 ### TTS Realtime (WebSocket)
 
+Lowest latency — audio is streamed over a persistent WebSocket connection.
+
 ```python
 import asyncio
-from gnani.tts import GnaniTTSRealtimeClient
+from gnani.tts import GnaniTTSRealtimeClient, AudioConfig
 
 async def main():
     async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
-        audio = await client.synthesize_and_collect("Realtime TTS response", voice="Simran")
-        with open("tts_realtime.wav", "wb") as f:
-            f.write(audio)
+        # synthesize_and_collect() returns a valid WAV file
+        audio = await client.synthesize_and_collect(
+            "Realtime TTS response",
+            voice="Simran",
+            audio_config=AudioConfig(sample_rate=16000, encoding="linear_pcm", container="wav"),
+            output_file="tts_realtime.wav",
+        )
 
 asyncio.run(main())
+```
+
+For raw PCM streaming (e.g. real-time playback):
+
+```python
+async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
+    async for pcm_chunk in client.synthesize("Hello!", voice="Karan"):
+        play_audio(pcm_chunk)  # raw PCM, no WAV header
 ```
 
 ### TTS Voices
