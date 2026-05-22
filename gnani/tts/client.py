@@ -7,6 +7,7 @@ import base64
 import contextlib
 import json
 import os
+import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Union
@@ -292,23 +293,52 @@ class GnaniTTSClient:
 # ---------------------------------------------------------------------------
 
 
+_WAV_HEADER_SIZE = 44
+
+
+def _strip_wav_header(data: bytes) -> bytes:
+    """Strip the RIFF/WAV header if present, returning only PCM samples."""
+    if len(data) > _WAV_HEADER_SIZE and data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return data[_WAV_HEADER_SIZE:]
+    return data
+
+
+def _build_wav_header(
+    pcm_size: int, sample_rate: int = 16000, num_channels: int = 1, sample_width: int = 2,
+) -> bytes:
+    """Build a minimal WAV header for raw PCM data."""
+    byte_rate = sample_rate * num_channels * sample_width
+    block_align = num_channels * sample_width
+    data_size = pcm_size
+    riff_size = 36 + data_size
+    return struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF", riff_size, b"WAVE",
+        b"fmt ", 16, 1, num_channels,
+        sample_rate, byte_rate, block_align, sample_width * 8,
+        b"data", data_size,
+    )
+
+
 def _parse_sse_lines(response: requests.Response) -> Iterator[bytes]:
     """Parse the SSE TTS stream and yield decoded audio chunks.
 
-    The server sends newline-delimited JSON objects:
+    The server sends SSE events with JSON payloads:
 
-    1. ``{"status": "streaming_started", ...}`` — start signal (skipped)
-    2. ``{"chunk_index": N, "audio": "<base64>", "is_final": false}`` — audio data
-    3. ``{"chunk_index": N, "audio": "", "is_final": true}`` — end marker
+    1. ``event: start`` / ``{"status": "streaming_started", ...}`` — skipped
+    2. ``event: chunk`` / ``{"chunk_index": N, "audio": "<base64>"}`` — audio
+    3. ``event: complete`` / ``{"chunk_index": N, "audio": "", "is_final": true}``
 
-    Chunks whose ``audio`` field is empty are silently skipped.
+    Each ``audio`` field decodes to a complete WAV file (RIFF header + PCM).
+    This function strips per-chunk WAV headers and yields only raw PCM.
+    The caller (e.g. :meth:`GnaniTTSStreamClient.synthesize`) is responsible
+    for wrapping the collected PCM in a single valid WAV header.
     """
     buf = ""
     for raw_line in response.iter_lines(decode_unicode=True):
         if not raw_line:
             continue
 
-        # Standard SSE prefix — strip it so we get at the JSON payload.
         if raw_line.startswith("data:"):
             raw_line = raw_line[len("data:"):].strip()
         if raw_line.startswith("event:"):
@@ -332,12 +362,14 @@ def _parse_sse_lines(response: requests.Response) -> Iterator[bytes]:
         if payload.get("is_final", False):
             audio_b64 = payload.get("audio", "")
             if audio_b64:
-                yield base64.b64decode(audio_b64)
+                yield _strip_wav_header(base64.b64decode(audio_b64))
             return
 
         audio_b64 = payload.get("audio", "")
-        if audio_b64:
-            yield base64.b64decode(audio_b64)
+        if not audio_b64:
+            continue
+
+        yield _strip_wav_header(base64.b64decode(audio_b64))
 
 
 class GnaniTTSStreamClient:
@@ -358,16 +390,10 @@ class GnaniTTSStreamClient:
 
     Examples
     --------
-    Stream directly to a file::
+    Save a complete WAV file::
 
         client = GnaniTTSStreamClient(api_key="key")
-        with open("output.wav", "wb") as f:
-            for chunk in client.synthesize_stream("Hello, world!", voice="Karan"):
-                f.write(chunk)
-
-    Collect all chunks into a single bytes object::
-
-        audio = client.synthesize("Hello!", voice="Karan")
+        audio = client.synthesize("Hello!", voice="Karan", output_file="output.wav")
     """
 
     def __init__(
@@ -400,9 +426,11 @@ class GnaniTTSStreamClient:
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
-        output_file: str | Path | None = None,
     ) -> Iterator[bytes]:
-        """Synthesise speech and yield audio chunks as they are generated.
+        """Synthesise speech and yield raw PCM audio chunks.
+
+        Each chunk contains raw PCM samples (no WAV header). Use
+        :meth:`synthesize` to get a complete WAV file instead.
 
         Parameters
         ----------
@@ -416,14 +444,11 @@ class GnaniTTSStreamClient:
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
             Voice cloning embedding. When provided, ``voice`` is ignored.
-        output_file : str or Path, optional
-            If provided, each audio chunk is appended to this file as it
-            arrives. Parent directories are created automatically.
 
         Yields
         ------
         bytes
-            Raw audio chunks as they arrive.
+            Raw PCM audio chunks as they arrive.
 
         Raises
         ------
@@ -449,15 +474,7 @@ class GnaniTTSStreamClient:
         if response.status_code != 200:
             raise APIError(response.status_code, response.text)
 
-        if output_file is not None:
-            dest = Path(output_file)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            with dest.open("wb") as fh:
-                for chunk in _parse_sse_lines(response):
-                    fh.write(chunk)
-                    yield chunk
-        else:
-            yield from _parse_sse_lines(response)
+        yield from _parse_sse_lines(response)
 
     def synthesize(
         self,
@@ -469,10 +486,10 @@ class GnaniTTSStreamClient:
         speaker_embedding: SpeakerEmbedding | None = None,
         output_file: str | Path | None = None,
     ) -> bytes:
-        """Synthesise speech and return the complete audio as bytes.
+        """Synthesise speech and return the complete audio as a valid WAV.
 
         Convenience wrapper around :meth:`synthesize_stream` that collects
-        all chunks into a single ``bytes`` object.
+        all raw PCM chunks and wraps them in a single WAV header.
 
         Parameters
         ----------
@@ -480,7 +497,8 @@ class GnaniTTSStreamClient:
             If provided, the complete audio is written to this file.
             Parent directories are created automatically.
         """
-        audio = b"".join(
+        cfg = audio_config or AudioConfig()
+        pcm = b"".join(
             self.synthesize_stream(
                 text,
                 voice,
@@ -489,6 +507,9 @@ class GnaniTTSStreamClient:
                 speaker_embedding=speaker_embedding,
             )
         )
+        audio = _build_wav_header(
+            len(pcm), cfg.sample_rate, cfg.num_channels, cfg.sample_width,
+        ) + pcm
         if output_file is not None:
             _save_audio(audio, output_file)
         return audio
