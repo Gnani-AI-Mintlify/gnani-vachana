@@ -3,7 +3,7 @@
 
 Official Python client for **[Vachana Speech APIs](https://docs.inya.ai/vachana/introduction/introduction)** by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
 
-> **Vachana** is a production-ready speech platform with high-accuracy STT and low-latency TTS for 22+ Indian languages, including 250+ voices, multilingual and code-switching scenarios.
+> **Vachana** is a production-ready speech platform with high-accuracy STT and low-latency TTS for 10+ Indian languages, with 6 voices, multilingual and code-switching scenarios.
 
 ## Installation
 
@@ -199,36 +199,33 @@ stream = GnaniSTTStreamClient(api_key="key", language_code=GnaniSTTStreamClient.
 
 ---
 
-### TTS Languages (Text-to-Speech) — 22 languages
+### TTS Voices
+
+| Voice   | Gender | Description              |
+|---------|--------|--------------------------|
+| Karan   | Male   | Bold, Trustworthy        |
+| Simran  | Female | Confident, Bright        |
+| Nara    | Female | Gentle, Expressive       |
+| Riya    | Female | Cheerful, Energetic      |
+| Viraj   | Male   | Commanding, Dynamic      |
+| Raju    | Male   | Grounded, Conversational |
+
+### TTS Languages (Text-to-Speech) — 10 languages
 
 TTS uses ISO 639 language codes (e.g. `hi`, `bn`). Note: TTS does **not** use the `-IN` suffix.
 
-| Language   | Code  | Sample Voices               |
-|------------|-------|-----------------------------|
-| Assamese   | `as`  | Priya, Ankita, Arjun        |
-| Bengali    | `bn`  | Ananya, Barnali, Abhik      |
-| Bodo       | `brx` | Anamika, Basanti, Anil      |
-| Dogri      | `doi` | Asha, Bhavna, Ajay          |
-| Gujarati   | `gu`  | Avani, Bansari, Akshay      |
-| Hindi      | `hi`  | Aarav, Bharat, Deepak       |
-| Kannada    | `kn`  | Anitha, Bhavani, Aditya     |
-| Kashmiri   | `ks`  | Aafreen, Bilqees, Altaf     |
-| Konkani    | `kok` | Alka, Bindiya, Agnelo       |
-| Maithili   | `mai` | Archana, Binita, Amaresh    |
-| Malayalam  | `ml`  | Ambika, Bindhu, Abhilash    |
-| Manipuri   | `mni` | Achouba, Biren_M, Chaoba    |
-| Marathi    | `mr`  | Aparna, Bharati, Amol       |
-| Nepali     | `ne`  | Anita, Binita_N, Amar       |
-| Odia       | `or`  | Anuradha, Bijayalaxmi       |
-| Punjabi    | `pa`  | Amandeep, Balwinder         |
-| Sanskrit   | `sa`  | Akshara, Bhavika, Achyut    |
-| Santhali   | `sat` | Arjun_S, Birsa, Chand       |
-| Sindhi     | `sd`  | Ameena, Bhagwanti           |
-| Tamil      | `ta`  | Abinaya, Anbarasan          |
-| Telugu     | `te`  | Alekhya, Bhargavi, Adithya  |
-| Urdu       | `ur`  | Aiza, Bushra, Asad          |
-
-Plus 6 **primary voices** that work across languages: `Karan`, `Simran`, `Nara`, `Riya`, `Viraj`, `Raju`.
+| Language   | Code  |
+|------------|-------|
+| Assamese   | `as`  |
+| Bengali    | `bn`  |
+| English    | `en`  |
+| Hindi      | `hi`  |
+| Kannada    | `kn`  |
+| Malayalam  | `ml`  |
+| Marathi    | `mr`  |
+| Odia       | `or`  |
+| Tamil      | `ta`  |
+| Telugu     | `te`  |
 
 ## REST Usage
 
@@ -429,7 +426,7 @@ asyncio.run(main())
 
 ### TTS Voices
 
-250+ voices are available across 22 Indian languages. List them programmatically:
+6 voices are available. List them programmatically:
 
 ```python
 from gnani.tts import GnaniTTSClient
@@ -437,11 +434,7 @@ from gnani.tts import GnaniTTSClient
 print(GnaniTTSClient.supported_voices())
 ```
 
-**v3 voices** (capitalized): `Karan`, `Simran`, `Nara`, `Riya`, `Viraj`, `Raju`, plus 250+ language-specific voices (e.g. `Aarav` for Hindi, `Priya` for Assamese, `Ananya` for Bengali).
-
-**Legacy v2 voices** (lowercase, still supported): `sia`, `raju`, `kanika`, `nikita`, `ravan`, `simran`, `karan`, `neha`.
-
-> **Casing matters:** `"karan"` (lowercase) uses `vachana-voice-v2`, while `"Karan"` (capitalized) uses `vachana-voice-v3`. Some names overlap between models — the casing determines which model is targeted.
+Available voices: `Karan`, `Simran`, `Nara`, `Riya`, `Viraj`, `Raju`.
 
 ## Audio Requirements
 

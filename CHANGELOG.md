@@ -5,23 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-05-22
+
+### Removed
+
+- **`vachana-voice-v2` model** — removed entirely along with all legacy v2 voices (`sia`, `raju`, `kanika`, `nikita`, `ravan`, `simran`, `karan`, `neha`).
+- **`vachana-voice-v1` model** — removed from `SUPPORTED_MODELS`.
+- **Language-specific v3 voices** — removed 320 language-specific voices. Only the 6 primary voices remain.
+- `LEGACY_V2_VOICES` and `V3_VOICES` constants removed from exports.
+
+### Changed
+
+- `SUPPORTED_VOICES` now contains only 6 voices: `Karan`, `Simran`, `Nara`, `Riya`, `Viraj`, `Raju`.
+- `SUPPORTED_MODELS` now contains only `vachana-voice-v3`.
+- `SUPPORTED_LANGUAGES` reduced to 10 languages: Assamese, Bengali, English, Hindi, Kannada, Malayalam, Marathi, Odia, Tamil, Telugu.
+
 ## [0.3.0] - 2026-05-21
 
 ### Added
 
 - **22 TTS languages** — Assamese, Bengali, Bodo, Dogri, Gujarati, Hindi, Kannada, Kashmiri, Konkani, Maithili, Malayalam, Manipuri, Marathi, Nepali, Odia, Punjabi, Sanskrit, Santhali, Sindhi, Tamil, Telugu, Urdu.
-- **250+ v3 TTS voices** (capitalized, e.g. `"Karan"`, `"Simran"`) — language-specific voices covering all 22 scheduled languages with both male and female options per language.
 - **23 STT languages** — expanded from 10 to 23 languages with Assamese, Bodo, Dogri, Kashmiri, Konkani, Maithili, Manipuri, Nepali, Odia, Sanskrit, Santhali, Sindhi, and Urdu.
 - `SUPPORTED_LANGUAGES` constant exported from `gnani.tts` for TTS language validation.
-- `LEGACY_V2_VOICES` and `V3_VOICES` constants to distinguish between model generations.
-- Legacy v2 voices (lowercase: `"sia"`, `"raju"`, `"karan"`, etc.) remain supported for backward compatibility with `vachana-voice-v2`.
 
 ### Changed
 
-- **Default TTS model** upgraded from `vachana-voice-v2` to `vachana-voice-v3`.
+- **Default TTS model** set to `vachana-voice-v3`.
 - **Default TTS voice** changed from `"sia"` to `"Karan"`.
-- `SUPPORTED_VOICES` is now the union of legacy v2 and new v3 voices. Casing matters: `"karan"` targets v2, `"Karan"` targets v3.
-- `SUPPORTED_MODELS` now includes `vachana-voice-v3`, `vachana-voice-v2`, and `vachana-voice-v1`.
 - `AUTO_DETECT_LANGUAGES` dynamically built from the supported language set.
 
 ## [0.2.2] - 2026-04-27
@@ -92,7 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom exceptions: `GnaniSTTError`, `AuthenticationError`, `InvalidAudioError`, `APIError`.
 - GitHub Actions workflow for PyPI publishing.
 
-[Unreleased]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.2.0...v0.2.1

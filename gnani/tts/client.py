@@ -33,95 +33,18 @@ TTS_WS_ENDPOINT = "/api/v1/tts"
 DEFAULT_MODEL = "vachana-voice-v3"
 DEFAULT_LANGUAGE = "IND-IN"
 
-# Legacy voices from vachana-voice-v2 (lowercase). Still supported for backward
-# compatibility — these work with model "vachana-voice-v2" only.
-LEGACY_V2_VOICES = frozenset({
-    "sia", "raju", "kanika", "nikita", "ravan", "simran", "karan", "neha",
-})
-
-# Voices for vachana-voice-v3 (capitalized). Some names overlap with legacy
-# voices (e.g. "Raju" vs "raju", "Karan" vs "karan", "Simran" vs "simran") —
-# the capitalized form targets v3, the lowercase form targets v2.
-V3_VOICES = frozenset({
-    # Primary voices
+SUPPORTED_VOICES = frozenset({
     "Karan", "Simran", "Nara", "Riya", "Viraj", "Raju",
-    # Assamese
-    "Priya", "Ankita", "Deepa", "Meena", "Kavya", "Sonal", "Tara", "Lata",
-    "Arjun", "Bikash", "Chinmoy", "Dipak", "Gautam", "Hemant", "Ishan", "Jatin",
-    # Bengali
-    "Ananya", "Barnali", "Chandana", "Diya", "Ena", "Falguni", "Gopa", "Haimanti",
-    "Abhik", "Biren", "Chirag", "Debraj", "Eshan", "Farhan", "Gourab", "Hridoy",
-    # Bodo
-    "Anamika", "Basanti", "Champa", "Durga", "Elina", "Fulomati", "Gitika", "Hiranya",
-    "Anil", "Biswajit", "Chandan", "Dhiraj", "Ewlung", "Felu", "Gobinda", "Hirendra",
-    # Dogri
-    "Asha", "Bhavna", "Charu", "Devika", "Ekta", "Fiza", "Geeta", "Hansa",
-    "Ajay", "Baldev", "Chetan", "Dinesh", "Eknath", "Feroz", "Gulshan", "Harbans",
-    # Gujarati
-    "Avani", "Bansari", "Charmi", "Dhara", "Esha", "Falak", "Gargi", "Heena",
-    "Akshay", "Bhavin", "Chirag_G", "Dhruv", "Eshan_G", "Falgun", "Gaurav", "Hardik",
-    # Hindi
-    "Aarav", "Bharat", "Chandan_H", "Deepak", "Eklavya", "Firoz", "Girish", "Hitesh",
-    # Kannada
-    "Anitha", "Bhavani", "Chaitra", "Divya", "Eswari", "Geetha", "Hema", "Indira",
-    "Aditya", "Basavaraj", "Chethan", "Darshan", "Eswar", "Ganesh", "Harish", "Imran_K",
-    # Kashmiri
-    "Aafreen", "Bilqees", "Chaman", "Dilshada", "Farida", "Gulnara", "Hajra", "Iffat",
-    "Altaf", "Bashir", "Choudhary", "Dilnawaz", "Fayaz", "Ghulam", "Habib", "Imtiyaz",
-    # Konkani
-    "Alka", "Bindiya", "Chhaya", "Damayanti", "Filomena", "Greta", "Hermine", "Ines",
-    "Agnelo", "Bosco", "Cletus", "Domnic", "Filipe", "Gracian", "Herculano", "Ivo",
-    # Maithili
-    "Archana", "Binita", "Chandrakala", "Dharitri", "Fulwanti", "Ganga", "Hemlata", "Indumati",
-    "Amaresh", "Baidyanath", "Chandrashekhar", "Durgesh", "Fanindra", "Gangadhar", "Harihar", "Indranath",
-    # Malayalam
-    "Ambika", "Bindhu", "Chithra", "Deepthi", "Elizabath", "Gowri", "Haritha", "Indulekha",
-    "Abhilash", "Biju", "Dileep", "Eldho", "Faizal", "Govind", "Harikrishnan", "Ibrahim_M",
-    # Manipuri
-    "Achouba", "Biren_M", "Chaoba", "Dinamani", "Ibomcha", "Khomdon", "Laishram", "Moirangthem",
-    # Marathi
-    "Aparna", "Bharati", "Chaitali", "Dipali", "Ekata", "Gauri", "Hruta", "Isha",
-    "Amol", "Bhalchandra", "Dattatray", "Eknath_M", "Ganpat", "Harishchandra", "Ishwar", "Jagannath",
-    # Nepali
-    "Anita", "Binita_N", "Chameli", "Durga_N", "Kamala", "Laxmi", "Mina", "Nirmala",
-    "Amar", "Bikram", "Chandra", "Dipendra", "Kamal", "Laxman", "Mohan", "Narayan",
-    # Odia
-    "Anuradha", "Bijayalaxmi", "Chitralekha", "Debasmita", "Itishree", "Jayashree", "Kabita", "Lipsa",
-    "Asutosh", "Biswabhusan", "Chitta", "Debashish", "Itishri", "Jagabandhu", "Kartik", "Lingaraj",
-    # Punjabi
-    "Amandeep", "Balwinder", "Charanjit", "Daljit", "Gurpreet", "Harpreet", "Jaspreet", "Kirandeep",
-    "Amarjit", "Balkar", "Charanjeet", "Daljeet", "Gurjeet", "Harjeet", "Jagjeet", "Kulwant",
-    # Sanskrit
-    "Akshara", "Bhavika", "Chanda", "Devaki", "Ekata_S", "Gayatri", "Hemavati", "Indrani",
-    "Achyut", "Brahmanand", "Chidananda", "Devdutt", "Gangadhar_S", "Harinath", "Ishaan", "Jagdish",
-    # Santhali
-    "Arjun_S", "Birsa", "Chand", "Dhanu", "Haram", "Jitu", "Kalu", "Lako",
-    # Sindhi
-    "Ameena", "Bhagwanti", "Chandni", "Draupadi", "Feroza", "Gulabo", "Heera", "Indra",
-    # Tamil
-    "Abinaya", "Bhavani_T", "Chitra", "Dhivya", "Ezhilarasi", "Geetha_T", "Hemamalini", "Ilavarasi",
-    "Anbarasan", "Balamurugan", "Chelladurai", "Dhanasekaran", "Elumalai", "Gnanasekaran", "Hariharan_T", "Ilayaraja",
-    # Telugu
-    "Alekhya", "Bhargavi", "Charitha", "Deepthi_T", "Eswari_T", "Gayathri", "Harika", "Indumathi",
-    "Adithya", "Bhaskar", "Chaitanya", "Dhanunjay", "Eswar_T", "Gowtham", "Harsha", "Indradeep",
-    # Urdu
-    "Aiza", "Bushra", "Chandni_U", "Dilnoza", "Fareeha", "Gulshan_U", "Hina", "Iqra",
-    "Asad", "Babar", "Danish", "Ehsan", "Faisal", "Ghazanfar", "Hamza", "Imran",
 })
-
-# All supported voices — union of legacy v2 (lowercase) and v3 (capitalized).
-# Casing matters: "karan" → v2 model, "Karan" → v3 model.
-SUPPORTED_VOICES = LEGACY_V2_VOICES | V3_VOICES
 
 SUPPORTED_LANGUAGES = frozenset({
-    "as", "bn", "brx", "doi", "gu", "hi", "kn", "ks", "kok", "mai",
-    "ml", "mni", "mr", "ne", "or", "pa", "sa", "sat", "sd", "ta", "te", "ur",
+    "as", "bn", "en", "hi", "kn", "ml", "mr", "or", "ta", "te",
 })
 
 SUPPORTED_ENCODINGS = frozenset({"linear_pcm", "oggopus"})
 SUPPORTED_CONTAINERS = frozenset({"raw", "mp3", "wav", "mulaw", "ogg"})
 SUPPORTED_BITRATES = frozenset({"96k", "128k", "192k"})
-SUPPORTED_MODELS = frozenset({"vachana-voice-v3", "vachana-voice-v2", "vachana-voice-v1"})
+SUPPORTED_MODELS = frozenset({"vachana-voice-v3"})
 
 
 # ---------------------------------------------------------------------------
@@ -220,8 +143,7 @@ def _validate_voice(voice: str | None) -> None:
     if voice is not None and voice not in SUPPORTED_VOICES:
         raise ValueError(
             f"Unsupported voice '{voice}'. "
-            f"v3 voices (capitalized): {', '.join(sorted(V3_VOICES)[:10])}... "
-            f"Legacy v2 voices (lowercase): {', '.join(sorted(LEGACY_V2_VOICES))}"
+            f"Supported voices: {', '.join(sorted(SUPPORTED_VOICES))}"
         )
 
 
@@ -319,7 +241,7 @@ class GnaniTTSClient:
             See ``SUPPORTED_VOICES`` for the full list.
             Ignored when ``speaker_embedding`` is provided. Defaults to ``"Karan"``.
         model : str
-            TTS model to use. Defaults to ``"vachana-voice-v2"``.
+            TTS model to use. Defaults to ``"vachana-voice-v3"``.
         audio_config : AudioConfig, optional
             Output audio configuration. Defaults to 44100 Hz WAV with linear PCM.
         speaker_embedding : SpeakerEmbedding, optional
@@ -489,7 +411,7 @@ class GnaniTTSStreamClient:
         voice : str, optional
             Pre-defined voice ID. Defaults to ``"Karan"``.
         model : str
-            TTS model to use. Defaults to ``"vachana-voice-v2"``.
+            TTS model to use. Defaults to ``"vachana-voice-v3"``.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -716,7 +638,7 @@ class GnaniTTSRealtimeClient:
         language : str
             Language / locale code for synthesis. Defaults to ``"IND-IN"``.
         model : str
-            TTS model to use. Defaults to ``"vachana-voice-v2"``.
+            TTS model to use. Defaults to ``"vachana-voice-v3"``.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -825,7 +747,7 @@ class GnaniTTSRealtimeClient:
         language : str
             Language / locale code. Defaults to ``"IND-IN"``.
         model : str
-            TTS model to use. Defaults to ``"vachana-voice-v2"``.
+            TTS model to use. Defaults to ``"vachana-voice-v3"``.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
