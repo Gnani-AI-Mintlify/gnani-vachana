@@ -20,11 +20,7 @@ Requires **Python 3.9+**.
 ```python
 from gnani.stt import GnaniSTTClient
 
-client = GnaniSTTClient(
-    organization_id="your-organization-id",
-    api_key="your-api-key",
-    user_id="your-user-id",
-)
+client = GnaniSTTClient(api_key="your-api-key")
 
 result = client.transcribe("audio.wav", language_code="hi-IN")
 print(result["transcript"])
@@ -94,27 +90,7 @@ asyncio.run(main())
 
 ## Authentication
 
-### STT REST API
-
-The REST API uses header-based authentication. Every request requires three credentials:
-
-| Parameter          | Header              | Description                        |
-|--------------------|---------------------|------------------------------------|
-| `organization_id`  | `X-Organization-ID` | Your organisation identifier       |
-| `api_key`          | `X-API-Key-ID`      | Secret key for authentication      |
-| `user_id`          | `X-API-User-ID`     | Your user / organisation name      |
-
-### STT Realtime Streaming API
-
-The WebSocket streaming API requires a single API key:
-
-| Parameter   | Header         | Description                           |
-|-------------|----------------|---------------------------------------|
-| `api_key`   | `x-api-key-id` | API key identifier for authentication |
-
-### TTS API (REST, SSE, Realtime)
-
-All TTS interfaces require a single API key:
+All APIs (STT REST, STT Realtime, TTS) require a single API key:
 
 | Parameter | Header         | Description                           |
 |-----------|----------------|---------------------------------------|
@@ -126,64 +102,42 @@ Email **[speechstack@gnani.ai](mailto:speechstack@gnani.ai)** with your name, co
 
 ### Passing Credentials
 
-**Option 1 -- Constructor arguments:**
+**Option 1 -- Constructor argument:**
 
 ```python
 from gnani.stt import GnaniSTTClient, GnaniSTTStreamClient
 from gnani.tts import GnaniTTSClient, GnaniTTSRealtimeClient, GnaniTTSStreamClient
 
-# REST client
-client = GnaniSTTClient(
-    organization_id="your-organization-id",
-    api_key="your-api-key",
-    user_id="your-user-id",
-)
-
-# Streaming client
+client = GnaniSTTClient(api_key="your-api-key")
 stream = GnaniSTTStreamClient(api_key="your-api-key")
-
-# TTS clients
 tts_rest = GnaniTTSClient(api_key="your-api-key")
 tts_stream = GnaniTTSStreamClient(api_key="your-api-key")
 tts_realtime = GnaniTTSRealtimeClient(api_key="your-api-key")
 ```
 
-**Option 2 -- Environment variables:**
+**Option 2 -- Environment variable:**
 
 ```bash
-# REST client credentials
-export GNANI_ORGANIZATION_ID="your-organization-id"
 export GNANI_API_KEY="your-api-key"
-export GNANI_USER_ID="your-user-id"
 ```
 
 ```python
 from gnani.stt import GnaniSTTClient, GnaniSTTStreamClient
 from gnani.tts import GnaniTTSClient
 
-client = GnaniSTTClient()           # picks up all three env vars
+client = GnaniSTTClient()           # picks up GNANI_API_KEY
 stream = GnaniSTTStreamClient()     # picks up GNANI_API_KEY
 tts = GnaniTTSClient()              # picks up GNANI_API_KEY
 ```
 
 ## Supported Languages
 
-### STT Languages (Speech-to-Text) — 10 languages
+### STT Languages (Speech-to-Text)
 
-STT uses BCP-47 locale codes (e.g. `hi-IN`):
+STT uses BCP-47 locale codes (e.g. `hi-IN`). For the full list of supported languages, see:
 
-| Language        | Code      | Native Script |
-|-----------------|-----------|---------------|
-| English (India) | `en-IN`   | Latin         |
-| Hindi           | `hi-IN`   | हिन्दी           |
-| Gujarati        | `gu-IN`   | ગુજરાતી         |
-| Tamil           | `ta-IN`   | தமிழ்          |
-| Kannada         | `kn-IN`   | ಕನ್ನಡ          |
-| Telugu          | `te-IN`   | తెలుగు         |
-| Marathi         | `mr-IN`   | मराठी          |
-| Bengali         | `bn-IN`   | বাংলা          |
-| Malayalam       | `ml-IN`   | മലയാളം        |
-| Punjabi         | `pa-IN`   | ਪੰਜਾਬੀ          |
+- **[STT REST — Supported Languages](https://docs.inya.ai/vachana/STT/speech-to-text#supported-languages)**
+- **[STT Realtime — Supported Languages](https://docs.inya.ai/vachana/STT/stt-websocket#supported-languages)**
 
 **Code-switching** — pass comma-separated codes for multilingual audio:
 
@@ -191,18 +145,11 @@ STT uses BCP-47 locale codes (e.g. `hi-IN`):
 result = client.transcribe("meeting.wav", language_code="en-IN,hi-IN")
 ```
 
-**Streaming-only experimental codes:**
-
-| Language                     | Code             | Notes                             |
-|------------------------------|------------------|-----------------------------------|
-| Hinglish (Latin)             | `en-hi-IN-latn`  | Latin script (experimental)       |
-| Hinglish (Code-mixed)        | `en-hi-in-cm`    | Latin + Devanagari (experimental) |
-| Auto-detect                  | `AUTO_DETECT`     | All supported (experimental)     |
+**Auto-detect (streaming only):**
 
 ```python
 from gnani.stt import GnaniSTTStreamClient
 
-stream = GnaniSTTStreamClient(api_key="key", language_code="en-hi-IN-latn")
 stream = GnaniSTTStreamClient(api_key="key", language_code=GnaniSTTStreamClient.AUTO_DETECT)
 ```
 
@@ -219,22 +166,11 @@ stream = GnaniSTTStreamClient(api_key="key", language_code=GnaniSTTStreamClient.
 | Viraj   | Male   | Commanding, Dynamic      |
 | Raju    | Male   | Grounded, Conversational |
 
-### TTS Languages (Text-to-Speech) — 10 languages
+### TTS Languages (Text-to-Speech)
 
 TTS uses ISO 639 language codes (e.g. `hi`, `bn`). Note: TTS does **not** use the `-IN` suffix.
 
-| Language   | Code  |
-|------------|-------|
-| Assamese   | `as`  |
-| Bengali    | `bn`  |
-| English    | `en`  |
-| Hindi      | `hi`  |
-| Kannada    | `kn`  |
-| Malayalam  | `ml`  |
-| Marathi    | `mr`  |
-| Odia       | `or`  |
-| Tamil      | `ta`  |
-| Telugu     | `te`  |
+For the full list of supported languages, see **[TTS — Supported Languages](https://docs.inya.ai/vachana/TTS/tts-inference#supported-languages)**.
 
 ## REST Usage
 
