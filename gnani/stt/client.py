@@ -180,12 +180,8 @@ class GnaniSTTClient:
 
     Parameters
     ----------
-    organization_id : str
-        Your unique organisation identifier (``X-Organization-ID``).
     api_key : str
         Your secret API key (``X-API-Key-ID``).
-    user_id : str
-        Your user / organisation name (``X-API-User-ID``).
     base_url : str, optional
         Override the default API base URL.
     timeout : int, optional
@@ -194,31 +190,24 @@ class GnaniSTTClient:
 
     def __init__(
         self,
-        organization_id: str | None = None,
         api_key: str | None = None,
-        user_id: str | None = None,
         *,
         base_url: str = DEFAULT_BASE_URL,
         timeout: int = 60,
     ):
-        self.organization_id = organization_id or os.getenv("GNANI_ORGANIZATION_ID", "")
         self.api_key = api_key or os.getenv("GNANI_API_KEY", "")
-        self.user_id = user_id or os.getenv("GNANI_USER_ID", "")
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
-        if not self.organization_id or not self.api_key or not self.user_id:
+        if not self.api_key:
             raise AuthenticationError(
-                "organization_id, api_key, and user_id are required. "
-                "Pass them directly or set GNANI_ORGANIZATION_ID, GNANI_API_KEY, "
-                "and GNANI_USER_ID environment variables."
+                "api_key is required. "
+                "Pass it directly or set the GNANI_API_KEY environment variable."
             )
 
     def _build_headers(self, request_id: str | None = None) -> dict[str, str]:
         return {
-            "X-Organization-ID": self.organization_id,
             "X-API-Key-ID": self.api_key,
-            "X-API-User-ID": self.user_id,
             "X-API-Request-ID": request_id or f"req_{uuid.uuid4().hex[:12]}",
         }
 

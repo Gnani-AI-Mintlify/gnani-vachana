@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gnani-vachana"
-version = "0.4.2"
+version = "0.4.3"
 description = "Python client for Gnani's Vachana speech AI platform (STT, TTS, and more)"
 readme = "README.md"
 license = "MIT"
