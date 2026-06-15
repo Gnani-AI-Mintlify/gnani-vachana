@@ -1,7 +1,7 @@
 # gnani-vachana
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Official Python client for **[Vachana Speech APIs](https://docs.inya.ai/vachana/introduction/introduction)** by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
+Official Python client for **[Vachana Speech APIs](https://docs.gnani.ai/)** by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
 
 > **Vachana** is a production-ready speech platform with high-accuracy STT and low-latency TTS for 10+ Indian languages, with 6 voices, multilingual and code-switching scenarios.
 
@@ -136,8 +136,8 @@ tts = GnaniTTSClient()              # picks up GNANI_API_KEY
 
 STT uses BCP-47 locale codes (e.g. `hi-IN`). For the full list of supported languages, see:
 
-- **[STT REST — Supported Languages](https://docs.inya.ai/vachana/STT/speech-to-text#supported-languages)**
-- **[STT Realtime — Supported Languages](https://docs.inya.ai/vachana/STT/stt-websocket#supported-languages)**
+- **[STT REST — Supported Languages](https://docs.gnani.ai/api/STT/speech-to-text#supported-languages)**
+- **[STT Realtime — Supported Languages](https://docs.gnani.ai/api/STT/stt-websocket#supported-languages)**
 
 **Code-switching** — pass comma-separated codes for multilingual audio:
 
@@ -170,7 +170,7 @@ stream = GnaniSTTStreamClient(api_key="key", language_code=GnaniSTTStreamClient.
 
 TTS uses ISO 639 language codes (e.g. `hi`, `bn`). Note: TTS does **not** use the `-IN` suffix.
 
-For the full list of supported languages, see **[TTS — Supported Languages](https://docs.inya.ai/vachana/TTS/tts-inference#supported-languages)**.
+For the full list of supported languages, see **[TTS — Supported Languages](https://docs.gnani.ai/api/TTS/tts-inference#supported-languages)**.
 
 ## REST Usage
 
@@ -504,13 +504,13 @@ except StreamError as e:
 
 ## Documentation
 
-Full API reference and guides are available at **[docs.inya.ai/vachana](https://docs.inya.ai/vachana/introduction/introduction)**.
+Full API reference and guides are available at **[docs.gnani.ai](https://docs.gnani.ai/)**.
 
-- [STT REST API](https://docs.inya.ai/vachana/STT/speech-to-text)
-- [STT Realtime WebSocket](https://docs.inya.ai/vachana/STT/stt-websocket)
-- [TTS REST API](https://docs.inya.ai/vachana/TTS/tts-inference)
-- [TTS Streaming (SSE)](https://docs.inya.ai/vachana/TTS/tts-sse)
-- [TTS Realtime WebSocket](https://docs.inya.ai/vachana/TTS/tts-websocket)
+- [STT REST API](https://docs.gnani.ai/api/STT/speech-to-text)
+- [STT Realtime WebSocket](https://docs.gnani.ai/api/STT/stt-websocket)
+- [TTS REST API](https://docs.gnani.ai/api/TTS/tts-inference)
+- [TTS Streaming (SSE)](https://docs.gnani.ai/api/TTS/tts-sse)
+- [TTS Realtime WebSocket](https://docs.gnani.ai/api/TTS/tts-websocket)
 
 ## License
 
