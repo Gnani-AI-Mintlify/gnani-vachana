@@ -59,7 +59,7 @@ AUTO_DETECT_LANGUAGES = ",".join(
     k for k in STREAM_SUPPORTED_LANGUAGES if not k.startswith("en-hi")
 )
 
-SUPPORTED_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a"}
+SUPPORTED_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"}
 
 DEFAULT_BASE_URL = "https://api.vachana.ai"
 STT_ENDPOINT = "/stt/v3"
@@ -216,6 +216,9 @@ class GnaniSTTClient:
         audio: Union[str, Path, BinaryIO],
         language_code: str = "en-IN",
         *,
+        preferred_language: str | None = None,
+        format: str = "verbatim",
+        itn_native_numerals: bool = False,
         request_id: str | None = None,
     ) -> dict[str, Any]:
         """Transcribe an audio file using Gnani STT.
@@ -226,7 +229,23 @@ class GnaniSTTClient:
             Path to an audio file, or an open file-like object (binary mode).
         language_code : str
             BCP-47 style language code. See ``SUPPORTED_LANGUAGES`` for the
-            full list. Defaults to ``"en-IN"``.
+            full list. Defaults to ``"en-IN"``. Pass a comma-separated list
+            for auto-detection (e.g. ``"en-IN,hi-IN"``).
+        preferred_language : str, optional
+            Force the single-language model for this code even when multiple
+            languages are specified in ``language_code``. Must be one of the
+            codes in ``language_code``.
+        format : str
+            ``"verbatim"`` (default) returns raw spoken-form output.
+            ``"transcribe"`` enables Inverse Text Normalization (ITN):
+            numbers, currency, dates, and phone numbers are written in
+            their conventional form. Currently supported for ``hi-IN``
+            and ``en-IN`` only.
+        itn_native_numerals : bool
+            When ``format="transcribe"``, set ``True`` to render digits in
+            the native script of the target language (e.g. ``₹५,०००``
+            instead of ``₹5,000`` for Hindi). Has no effect when
+            ``format="verbatim"``. Defaults to ``False``.
         request_id : str, optional
             Custom request ID for tracking. Auto-generated if omitted.
 
@@ -247,6 +266,11 @@ class GnaniSTTClient:
             raise ValueError(
                 f"Unsupported language_code '{language_code}'. "
                 f"Choose from: {', '.join(sorted(SUPPORTED_LANGUAGES))}"
+            )
+
+        if format not in ("verbatim", "transcribe"):
+            raise ValueError(
+                f"format must be 'verbatim' or 'transcribe', got '{format}'"
             )
 
         headers = self._build_headers(request_id)
@@ -270,7 +294,12 @@ class GnaniSTTClient:
 
             url = f"{self.base_url}{STT_ENDPOINT}"
             files = {"audio_file": file_handle}
-            data = {"language_code": language_code}
+            data: dict[str, Any] = {"language_code": language_code, "format": format}
+
+            if preferred_language is not None:
+                data["preferred_language"] = preferred_language
+            if itn_native_numerals:
+                data["itn_native_numerals"] = "true"
 
             response = requests.post(
                 url,
@@ -294,6 +323,9 @@ class GnaniSTTClient:
         filename: str = "audio.wav",
         language_code: str = "en-IN",
         *,
+        preferred_language: str | None = None,
+        format: str = "verbatim",
+        itn_native_numerals: bool = False,
         request_id: str | None = None,
     ) -> dict[str, Any]:
         """Transcribe raw audio bytes.
@@ -306,6 +338,13 @@ class GnaniSTTClient:
             Filename hint so the server can infer the format.
         language_code : str
             Target language code.
+        preferred_language : str, optional
+            Force the single-language model for this code even when multiple
+            languages are specified in ``language_code``.
+        format : str
+            ``"verbatim"`` (default) or ``"transcribe"`` (enables ITN).
+        itn_native_numerals : bool
+            When ``format="transcribe"``, render digits in native script.
         request_id : str, optional
             Custom request ID.
 
@@ -320,10 +359,20 @@ class GnaniSTTClient:
                 f"Choose from: {', '.join(sorted(SUPPORTED_LANGUAGES))}"
             )
 
+        if format not in ("verbatim", "transcribe"):
+            raise ValueError(
+                f"format must be 'verbatim' or 'transcribe', got '{format}'"
+            )
+
         headers = self._build_headers(request_id)
         url = f"{self.base_url}{STT_ENDPOINT}"
         files = {"audio_file": (filename, audio_bytes)}
-        data = {"language_code": language_code}
+        data: dict[str, Any] = {"language_code": language_code, "format": format}
+
+        if preferred_language is not None:
+            data["preferred_language"] = preferred_language
+        if itn_native_numerals:
+            data["itn_native_numerals"] = "true"
 
         response = requests.post(
             url,
