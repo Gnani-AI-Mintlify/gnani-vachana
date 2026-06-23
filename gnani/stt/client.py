@@ -55,9 +55,7 @@ STREAM_SUPPORTED_LANGUAGES = {
     "en-hi-in-cm": "Hinglish (Code-mixed, experimental)",
 }
 
-AUTO_DETECT_LANGUAGES = ",".join(
-    k for k in STREAM_SUPPORTED_LANGUAGES if not k.startswith("en-hi")
-)
+AUTO_DETECT_LANGUAGES = ",".join(k for k in STREAM_SUPPORTED_LANGUAGES if not k.startswith("en-hi"))
 
 SUPPORTED_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"}
 
@@ -269,9 +267,7 @@ class GnaniSTTClient:
             )
 
         if format not in ("verbatim", "transcribe"):
-            raise ValueError(
-                f"format must be 'verbatim' or 'transcribe', got '{format}'"
-            )
+            raise ValueError(f"format must be 'verbatim' or 'transcribe', got '{format}'")
 
         headers = self._build_headers(request_id)
         file_handle = None
@@ -360,9 +356,7 @@ class GnaniSTTClient:
             )
 
         if format not in ("verbatim", "transcribe"):
-            raise ValueError(
-                f"format must be 'verbatim' or 'transcribe', got '{format}'"
-            )
+            raise ValueError(f"format must be 'verbatim' or 'transcribe', got '{format}'")
 
         headers = self._build_headers(request_id)
         url = f"{self.base_url}{STT_ENDPOINT}"
@@ -495,6 +489,8 @@ class GnaniSTTStreamClient:
         *,
         sample_rate: int = SAMPLE_RATE_16K,
         base_url: str = DEFAULT_BASE_URL,
+        format: str = "verbatim",
+        itn_native_numerals: bool = False,
     ):
         self.api_key = api_key or os.getenv("GNANI_API_KEY", "")
         if not self.api_key:
@@ -519,8 +515,13 @@ class GnaniSTTStreamClient:
                 f"or use GnaniSTTStreamClient.AUTO_DETECT for auto-detection."
             )
 
+        if format not in ("verbatim", "transcribe"):
+            raise ValueError(f"format must be 'verbatim' or 'transcribe', got '{format}'")
+
         self.language_code = language_code
         self.sample_rate = sample_rate
+        self.format = format
+        self.itn_native_numerals = itn_native_numerals
 
         ws_scheme = "wss" if base_url.startswith("https") else "ws"
         host = base_url.replace("https://", "").replace("http://", "").rstrip("/")
@@ -577,10 +578,15 @@ class GnaniSTTStreamClient:
         StreamConnectionError
             If the connection cannot be established.
         """
-        headers = {
+        headers: dict[str, str] = {
             "x-api-key-id": self.api_key,
             "lang_code": self.language_code,
+            "x-sample-rate": str(self.sample_rate),
         }
+        if self.format != "verbatim":
+            headers["x-format"] = self.format
+        if self.itn_native_numerals:
+            headers["itn_native_numerals"] = "true"
 
         try:
             self._ws = await websockets.connect(
