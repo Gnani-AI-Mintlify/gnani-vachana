@@ -1,12 +1,10 @@
 """Gnani TTS - Python client for Gnani's multilingual Text-to-Speech API."""
 
 from gnani.tts.client import (
-    DEFAULT_LANGUAGE,
     DEFAULT_MODEL,
     SUPPORTED_BITRATES,
     SUPPORTED_CONTAINERS,
     SUPPORTED_ENCODINGS,
-    SUPPORTED_LANGUAGES,
     SUPPORTED_MODELS,
     SUPPORTED_VOICES,
     AudioConfig,
@@ -29,12 +27,10 @@ from gnani.tts.exceptions import (
 )
 
 __all__ = [
-    "DEFAULT_LANGUAGE",
     "DEFAULT_MODEL",
     "SUPPORTED_BITRATES",
     "SUPPORTED_CONTAINERS",
     "SUPPORTED_ENCODINGS",
-    "SUPPORTED_LANGUAGES",
     "SUPPORTED_MODELS",
     "SUPPORTED_VOICES",
     "APIError",

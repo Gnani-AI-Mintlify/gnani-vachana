@@ -32,14 +32,9 @@ TTS_SSE_ENDPOINT = "/api/v1/tts/sse"
 TTS_WS_ENDPOINT = "/api/v1/tts"
 
 DEFAULT_MODEL = "vachana-voice-v3"
-DEFAULT_LANGUAGE = "IND-IN"
 
 SUPPORTED_VOICES = frozenset({
     "Karan", "Simran", "Nara", "Riya", "Viraj", "Raju",
-})
-
-SUPPORTED_LANGUAGES = frozenset({
-    "as", "bn", "en", "hi", "kn", "ml", "mr", "or", "ta", "te",
 })
 
 SUPPORTED_ENCODINGS = frozenset({"linear_pcm", "oggopus"})
@@ -639,7 +634,6 @@ class GnaniTTSRealtimeClient:
         text: str,
         voice: str | None = "Karan",
         *,
-        language: str = DEFAULT_LANGUAGE,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
@@ -656,8 +650,6 @@ class GnaniTTSRealtimeClient:
             The text to synthesise.
         voice : str, optional
             Pre-defined voice ID. Defaults to ``"Karan"``.
-        language : str
-            Language / locale code for synthesis. Defaults to ``"IND-IN"``.
         model : str
             TTS model to use. Defaults to ``"vachana-voice-v3"``.
         audio_config : AudioConfig, optional
@@ -682,7 +674,6 @@ class GnaniTTSRealtimeClient:
         body: dict[str, Any] = {
             "text": text,
             "voice": voice,
-            "language": language,
             "model": model,
             "audio_config": cfg.to_dict(),
         }
@@ -746,7 +737,6 @@ class GnaniTTSRealtimeClient:
         text: str,
         voice: str | None = "Karan",
         *,
-        language: str = DEFAULT_LANGUAGE,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
@@ -764,8 +754,6 @@ class GnaniTTSRealtimeClient:
             The text to synthesise.
         voice : str, optional
             Pre-defined voice ID. Defaults to ``"Karan"``.
-        language : str
-            Language / locale code. Defaults to ``"IND-IN"``.
         model : str
             TTS model to use. Defaults to ``"vachana-voice-v3"``.
         audio_config : AudioConfig, optional
@@ -786,7 +774,6 @@ class GnaniTTSRealtimeClient:
         body: dict[str, Any] = {
             "text": text,
             "voice": voice,
-            "language": language,
             "model": model,
             "audio_config": cfg.to_dict(),
         }
@@ -875,7 +862,6 @@ class GnaniTTSRealtimeClient:
         text: str,
         voice: str | None = "Karan",
         *,
-        language: str = DEFAULT_LANGUAGE,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
@@ -888,8 +874,6 @@ class GnaniTTSRealtimeClient:
 
         Parameters
         ----------
-        language : str
-            Language / locale code for synthesis. Defaults to ``"IND-IN"``.
         output_file : str or Path, optional
             If provided, the complete audio is written to this file.
             Parent directories are created automatically.
@@ -904,7 +888,6 @@ class GnaniTTSRealtimeClient:
         async for chunk in self.synthesize(
             text,
             voice,
-            language=language,
             model=model,
             audio_config=audio_config,
             speaker_embedding=speaker_embedding,

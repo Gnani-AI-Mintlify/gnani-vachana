@@ -168,8 +168,6 @@ stream = GnaniSTTStreamClient(api_key="key", language_code=GnaniSTTStreamClient.
 
 ### TTS Languages (Text-to-Speech)
 
-TTS uses ISO 639 language codes (e.g. `hi`, `bn`). Note: TTS does **not** use the `-IN` suffix.
-
 For the full list of supported languages, see **[TTS — Supported Languages](https://docs.gnani.ai/api/TTS/tts-inference#supported-languages)**.
 
 ## REST Usage
@@ -222,15 +220,24 @@ for code, name in GnaniSTTClient.supported_languages().items():
 4. Server detects speech via VAD and responds with `processing` and `transcript` events.
 5. Either side may close the connection at any time.
 
-### Audio Format
+### PCM Specification
 
-| Property    | 16 kHz                | 8 kHz               |
-|-------------|----------------------|----------------------|
-| Encoding    | PCM signed 16-bit LE | PCM signed 16-bit LE |
-| Sample Rate | 16,000 Hz            | 8,000 Hz             |
-| Channels    | 1 (mono)             | 1 (mono)             |
-| Chunk Size  | 512 samples (32 ms)  | 512 samples (64 ms)  |
-| Frame Bytes | 1,024                | 1,024                |
+All audio must be sent as **raw PCM binary frames**. No container format (WAV, MP3, etc.) is accepted mid-stream.
+
+| Property          | 16 kHz                                    | 8 kHz                                     |
+|-------------------|-------------------------------------------|-------------------------------------------|
+| Encoding          | PCM signed 16-bit little-endian           | PCM signed 16-bit little-endian           |
+| Sample Rate       | 16,000 Hz                                 | 8,000 Hz                                  |
+| Channels          | 1 (mono)                                  | 1 (mono)                                  |
+| Samples per chunk | 512                                       | 512                                       |
+| **Bytes per frame** | **1,024 bytes** (512 samples × 2 bytes) | **1,024 bytes** (512 samples × 2 bytes)   |
+| Frame duration    | 32 ms                                     | 64 ms                                     |
+
+- Each binary frame must be **exactly 1,024 bytes**.
+- Frames must be sent at **real-time cadence** — one frame every 32 ms (16 kHz) or 64 ms (8 kHz). Do not buffer and burst; this degrades VAD accuracy.
+- For `44100` and `48000` Hz sources, the server resamples internally — still send 1,024-byte frames at the appropriate cadence.
+
+For the full WebSocket protocol reference, see **[STT Realtime — PCM Specification](https://docs.gnani.ai/api/STT/stt-websocket#pcm-specification)**.
 
 ### Using the async context manager
 
@@ -411,7 +418,7 @@ Available voices: `Karan`, `Simran`, `Nara`, `Riya`, `Viraj`, `Raju`.
 
 ## Audio Requirements
 
-### REST API
+### STT REST
 
 | Constraint       | Value                                      |
 |------------------|--------------------------------------------|
@@ -420,7 +427,7 @@ Available voices: `Karan`, `Simran`, `Nara`, `Riya`, `Viraj`, `Raju`.
 | Channels         | Mono or stereo                             |
 | Sample rate      | Automatically converted to 16 kHz mono     |
 
-### Realtime Streaming
+### STT Streaming (WebSocket)
 
 | Constraint       | Value                                                  |
 |------------------|--------------------------------------------------------|
@@ -429,6 +436,8 @@ Available voices: `Karan`, `Simran`, `Nara`, `Riya`, `Viraj`, `Raju`.
 | Channels         | 1 (mono)                                               |
 | Frame size       | 1,024 bytes (512 samples)                              |
 | Pacing           | Send frames at real-time cadence for best VAD accuracy |
+
+See **[PCM Specification](https://docs.gnani.ai/api/STT/stt-websocket#pcm-specification)** for full details.
 
 ## Response Format
 

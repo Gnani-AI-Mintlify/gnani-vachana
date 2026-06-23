@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-06-23
+
+### Removed
+
+- **`language` parameter from TTS** — removed `language` from `GnaniTTSRealtimeClient.synthesize()`, `synthesize_events()`, and `synthesize_and_collect()`. TTS no longer accepts a language parameter.
+- **`DEFAULT_LANGUAGE` and `SUPPORTED_LANGUAGES` constants** — removed from `gnani.tts` exports.
+
+### Changed
+
+- **STT documentation** — clarified that only REST and Streaming (WebSocket) modes are integrated; no batch STT. Added PCM specification details with link to [STT Realtime — PCM Specification](https://docs.gnani.ai/api/STT/stt-websocket#pcm-specification).
+
 ## [0.4.3] - 2026-05-31
 
 ### Removed
