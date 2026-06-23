@@ -460,6 +460,14 @@ class GnaniSTTStreamClient:
         Defaults to ``16000``.
     base_url : str, optional
         Override the default WebSocket base URL.
+    preferred_language : str, optional
+        Force the single-language model for this code even when multiple
+        languages are specified in ``language_code``. Sent as the
+        ``preferred_language`` connection header.
+    format : str
+        ``"verbatim"`` (default) or ``"transcribe"`` (enables ITN).
+    itn_native_numerals : bool
+        When ``format="transcribe"``, render digits in native script.
 
     Examples
     --------
@@ -489,6 +497,7 @@ class GnaniSTTStreamClient:
         *,
         sample_rate: int = SAMPLE_RATE_16K,
         base_url: str = DEFAULT_BASE_URL,
+        preferred_language: str | None = None,
         format: str = "verbatim",
         itn_native_numerals: bool = False,
     ):
@@ -520,6 +529,7 @@ class GnaniSTTStreamClient:
 
         self.language_code = language_code
         self.sample_rate = sample_rate
+        self.preferred_language = preferred_language
         self.format = format
         self.itn_native_numerals = itn_native_numerals
 
@@ -585,6 +595,8 @@ class GnaniSTTStreamClient:
         }
         if self.format != "verbatim":
             headers["x-format"] = self.format
+        if self.preferred_language is not None:
+            headers["preferred_language"] = self.preferred_language
         if self.itn_native_numerals:
             headers["itn_native_numerals"] = "true"
 

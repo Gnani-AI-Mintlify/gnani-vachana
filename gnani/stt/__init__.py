@@ -25,7 +25,7 @@ from gnani.stt.exceptions import (
     StreamError,
 )
 
-__version__ = "0.5.1"
+__version__ = "0.5.3"
 __all__ = [
     "SAMPLE_RATE_8K",
     "SAMPLE_RATE_16K",
