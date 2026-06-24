@@ -1,9 +1,9 @@
 # gnani
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Official Python client for **[Vachana Speech APIs](https://docs.gnani.ai/)** by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
+Official Python client by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
 
-> **Vachana** is a production-ready speech platform with high-accuracy STT and low-latency TTS for 10+ Indian languages, with 6 voices, multilingual and code-switching scenarios.
+> **[Gnani.ai](https://gnani.ai)** is a production-ready speech AI platform with high-accuracy STT and low-latency TTS for 10+ Indian languages, with 6 voices, multilingual and code-switching scenarios.
 
 ## Installation
 
