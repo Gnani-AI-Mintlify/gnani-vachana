@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-06-24
+
+### Changed
+
+- **Package renamed** — PyPI distribution name changed from `gnani-vachana` to `gnani`. Install with `pip install gnani`. The Python import namespace (`gnani`) is unchanged.
+
 ## [0.5.1] - 2026-06-23
 
 ### Removed
@@ -119,7 +125,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial public release of the `gnani-vachana` Python SDK.
+- Initial public release of the `gnani` (formerly `gnani-vachana`) Python SDK.
 - `GnaniSTTClient` for REST-based file transcription.
 - Support for 10 Indian languages plus English-Hindi code-switching.
 - `transcribe()` and `transcribe_bytes()` methods.
@@ -127,7 +133,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom exceptions: `GnaniSTTError`, `AuthenticationError`, `InvalidAudioError`, `APIError`.
 - GitHub Actions workflow for PyPI publishing.
 
-[Unreleased]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.5.1...v0.6.0
 [0.4.3]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.4.1...v0.4.3
 [0.4.1]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/compare/v0.3.0...v0.4.0

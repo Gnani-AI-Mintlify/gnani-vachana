@@ -1,4 +1,4 @@
-# gnani-vachana
+# gnani
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Official Python client for **[Vachana Speech APIs](https://docs.gnani.ai/)** by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
@@ -8,7 +8,7 @@ Official Python client for **[Vachana Speech APIs](https://docs.gnani.ai/)** by 
 ## Installation
 
 ```bash
-pip install gnani-vachana
+pip install gnani
 ```
 
 Requires **Python 3.9+**.

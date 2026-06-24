@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "gnani-vachana"
-version = "0.5.3"
-description = "Python client for Gnani's Vachana speech AI platform (STT, TTS, and more)"
+name = "gnani"
+version = "0.6.0"
+description = "Python client for Gnani's speech AI platform (STT, TTS, and more)"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
