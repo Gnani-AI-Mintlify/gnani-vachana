@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gnani"
-version = "0.6.0"
+version = "0.7.0"
 description = "Python client for Gnani's speech AI platform (STT, TTS, and more)"
 readme = "README.md"
 license = "MIT"
@@ -31,6 +31,17 @@ classifiers = [
 dependencies = [
     "requests>=2.28.0",
     "websockets>=12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.0",
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-timeout>=2.1",
+    "pytest-cov>=4.0",
+    "python-dotenv>=1.0",
+    "ruff>=0.4",
 ]
 
 [project.urls]
@@ -63,8 +74,12 @@ select = [
     "RUF",   # ruff-specific rules
 ]
 ignore = [
-    "E501",  # line length handled by formatter
-    "UP007", # allow Union[X, Y] syntax alongside X | Y for py39 compat
+    "E501",   # line length handled by formatter
+    "UP007",  # allow Union[X, Y] syntax alongside X | Y for py39 compat
+    "F601",   # duplicate dict keys in SUPPORTED_LANGUAGES (intentional: REST + stream + auto-detect maps)
+    "RUF002", # Devanagari/Unicode chars in docstrings (intentional for Indic language examples)
+    "B009",   # getattr with constant attr (used for websockets version compat)
+    "TCH003", # stdlib imports in type-checking block (not worth churn)
 ]
 
 [tool.ruff.lint.isort]
@@ -73,6 +88,19 @@ known-first-party = ["gnani"]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["tests"]
+markers = [
+    "integration: marks tests requiring live API (deselect with '-m not integration')",
+    "slow: marks slow tests (deselect with '-m not slow')",
+    "timeout: per-test timeout in seconds (requires pytest-timeout)",
+]
 
 # ---------------------------------------------------------------------------
 # Mypy (optional static type-checking)

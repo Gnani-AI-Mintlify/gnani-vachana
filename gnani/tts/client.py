@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import contextlib
 import json
 import os
 import struct
-from dataclasses import dataclass, field
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Union
+from typing import TYPE_CHECKING, Any, Union
 
 import requests
 import websockets
@@ -18,7 +18,6 @@ import websockets
 from gnani.tts.exceptions import (
     APIError,
     AuthenticationError,
-    StreamClosedError,
     StreamConnectionError,
     StreamError,
 )
@@ -33,9 +32,20 @@ TTS_WS_ENDPOINT = "/api/v1/tts"
 
 DEFAULT_MODEL = "vachana-voice-v3"
 
-SUPPORTED_VOICES = frozenset({
-    "Karan", "Simran", "Nara", "Riya", "Viraj", "Raju",
-})
+SUPPORTED_VOICES = frozenset(
+    {
+        "Karan",
+        "Simran",
+        "Nara",
+        "Riya",
+        "Viraj",
+        "Raju",
+        "Pranav",
+        "Kaveri",
+        "Shubhra",
+        "Deepak",
+    }
+)
 
 SUPPORTED_ENCODINGS = frozenset({"linear_pcm", "oggopus"})
 SUPPORTED_CONTAINERS = frozenset({"raw", "mp3", "wav", "mulaw", "ogg"})
@@ -138,8 +148,7 @@ def _build_request_body(
 def _validate_voice(voice: str | None) -> None:
     if voice is not None and voice not in SUPPORTED_VOICES:
         raise ValueError(
-            f"Unsupported voice '{voice}'. "
-            f"Supported voices: {', '.join(sorted(SUPPORTED_VOICES))}"
+            f"Unsupported voice '{voice}'. Supported voices: {', '.join(sorted(SUPPORTED_VOICES))}"
         )
 
 
@@ -299,7 +308,10 @@ def _strip_wav_header(data: bytes) -> bytes:
 
 
 def _build_wav_header(
-    pcm_size: int, sample_rate: int = 16000, num_channels: int = 1, sample_width: int = 2,
+    pcm_size: int,
+    sample_rate: int = 16000,
+    num_channels: int = 1,
+    sample_width: int = 2,
 ) -> bytes:
     """Build a minimal WAV header for raw PCM data."""
     byte_rate = sample_rate * num_channels * sample_width
@@ -308,10 +320,19 @@ def _build_wav_header(
     riff_size = 36 + data_size
     return struct.pack(
         "<4sI4s4sIHHIIHH4sI",
-        b"RIFF", riff_size, b"WAVE",
-        b"fmt ", 16, 1, num_channels,
-        sample_rate, byte_rate, block_align, sample_width * 8,
-        b"data", data_size,
+        b"RIFF",
+        riff_size,
+        b"WAVE",
+        b"fmt ",
+        16,
+        1,
+        num_channels,
+        sample_rate,
+        byte_rate,
+        block_align,
+        sample_width * 8,
+        b"data",
+        data_size,
     )
 
 
@@ -335,7 +356,7 @@ def _parse_sse_lines(response: requests.Response) -> Iterator[bytes]:
             continue
 
         if raw_line.startswith("data:"):
-            raw_line = raw_line[len("data:"):].strip()
+            raw_line = raw_line[len("data:") :].strip()
         if raw_line.startswith("event:"):
             continue
 
@@ -347,9 +368,7 @@ def _parse_sse_lines(response: requests.Response) -> Iterator[bytes]:
         buf = ""
 
         if "error" in payload or payload.get("status") == "error":
-            raise StreamError(
-                payload.get("message", payload.get("error", json.dumps(payload)))
-            )
+            raise StreamError(payload.get("message", payload.get("error", json.dumps(payload))))
 
         if payload.get("status") == "streaming_started":
             continue
@@ -502,9 +521,15 @@ class GnaniTTSStreamClient:
                 speaker_embedding=speaker_embedding,
             )
         )
-        audio = _build_wav_header(
-            len(pcm), cfg.sample_rate, cfg.num_channels, cfg.sample_width,
-        ) + pcm
+        audio = (
+            _build_wav_header(
+                len(pcm),
+                cfg.sample_rate,
+                cfg.num_channels,
+                cfg.sample_width,
+            )
+            + pcm
+        )
         if output_file is not None:
             _save_audio(audio, output_file)
         return audio
@@ -689,9 +714,7 @@ class GnaniTTSRealtimeClient:
                 close_timeout=10,
             )
         except Exception as exc:
-            raise StreamConnectionError(
-                f"Failed to connect to {self._ws_url}: {exc}"
-            ) from exc
+            raise StreamConnectionError(f"Failed to connect to {self._ws_url}: {exc}") from exc
 
         try:
             await ws.send(json.dumps(body))
@@ -722,9 +745,7 @@ class GnaniTTSRealtimeClient:
                     return
 
                 elif msg_type == "error":
-                    raise StreamError(
-                        payload.get("message", json.dumps(payload))
-                    )
+                    raise StreamError(payload.get("message", json.dumps(payload)))
 
         except websockets.ConnectionClosed:
             pass
@@ -789,9 +810,7 @@ class GnaniTTSRealtimeClient:
                 close_timeout=10,
             )
         except Exception as exc:
-            raise StreamConnectionError(
-                f"Failed to connect to {self._ws_url}: {exc}"
-            ) from exc
+            raise StreamConnectionError(f"Failed to connect to {self._ws_url}: {exc}") from exc
 
         chunk_count = 0
         try:
@@ -801,7 +820,8 @@ class GnaniTTSRealtimeClient:
                     chunk_count += 1
                     yield TTSAudioChunkEvent(
                         data=_strip_wav_header(message),
-                        chunk_index=chunk_count, is_final=False,
+                        chunk_index=chunk_count,
+                        is_final=False,
                     )
                     continue
 
@@ -847,9 +867,7 @@ class GnaniTTSRealtimeClient:
                     return
 
                 elif msg_type == "error":
-                    raise StreamError(
-                        payload.get("message", json.dumps(payload))
-                    )
+                    raise StreamError(payload.get("message", json.dumps(payload)))
 
         except websockets.ConnectionClosed:
             pass
@@ -894,9 +912,15 @@ class GnaniTTSRealtimeClient:
         ):
             chunks.append(chunk)
         pcm = b"".join(chunks)
-        audio = _build_wav_header(
-            len(pcm), cfg.sample_rate, cfg.num_channels, cfg.sample_width,
-        ) + pcm
+        audio = (
+            _build_wav_header(
+                len(pcm),
+                cfg.sample_rate,
+                cfg.num_channels,
+                cfg.sample_width,
+            )
+            + pcm
+        )
         if output_file is not None:
             _save_audio(audio, output_file)
         return audio

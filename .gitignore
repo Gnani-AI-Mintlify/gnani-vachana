@@ -15,10 +15,6 @@ env/
 
 .env
 .env.*
-*.ini
-*.cfg
-!setup.cfg
-!pyproject.toml
 
 *.log
 .mypy_cache/
@@ -36,5 +32,7 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Test output
+# Dev tooling (not shipped with package)
 tests/
+Makefile
+scripts/

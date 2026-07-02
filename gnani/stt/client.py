@@ -551,9 +551,9 @@ class GnaniSTTStreamClient:
 
         # websockets<=11 exposed `.open`; newer versions expose `.state`.
         if hasattr(self._ws, "open"):
-            return bool(getattr(self._ws, "open"))
+            return bool(self._ws.open)
         if hasattr(self._ws, "closed"):
-            return not bool(getattr(self._ws, "closed"))
+            return not bool(self._ws.closed)
 
         state = getattr(self._ws, "state", None)
         state_name = getattr(state, "name", None)
