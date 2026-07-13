@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **WebSocket compatibility with `websockets` 12.x** — the STT and TTS realtime clients passed `additional_headers` to `websockets.connect()`, which only exists in `websockets >= 13`. On `websockets` 12.x (still allowed by the `>=12.0` requirement, and commonly pinned by other libraries such as `gradio-client`, which requires `<13`) the connection failed with `TypeError: create_connection() got an unexpected keyword argument 'additional_headers'`. The clients now select `additional_headers` (>= 13) or `extra_headers` (< 13) based on the installed version, so all realtime STT/TTS flows work across `websockets` 12–15.
+
+### Added
+
+- **STT streaming sample rates** — `GnaniSTTStreamClient` now accepts `44100` and `48000` Hz in addition to `8000` and `16000`, matching the documented `x-sample-rate` values. See [STT Realtime — Connection Headers](https://docs.gnani.ai/api/STT/stt-websocket). New constants `SAMPLE_RATE_44K`, `SAMPLE_RATE_48K`, and `STREAM_SUPPORTED_SAMPLE_RATES` are exported from `gnani.stt`.
+- **STT REST language auto-detection** — `transcribe()` and `transcribe_bytes()` now accept any comma-separated combination of supported single language codes (e.g. `"en-IN,ta-IN"`) to enable server-side auto-detection, per the [REST STT docs](https://docs.gnani.ai/api/STT/speech-to-text).
+- **CI workflow** — GitHub Actions `CI` workflow runs ruff, mypy, and the test suite across Python 3.9–3.13 on every push and pull request.
+- **Test suite is now committed** — `tests/`, `Makefile`, and `scripts/` are no longer gitignored, so the full unit + live integration suite can be run in CI and verified independently (`git clone` → `pip install -e ".[dev]"` → `pytest tests/`). An sdist `include = ["/gnani"]` filter was added so the published wheel/sdist still ship only `gnani/`; `playground/` and generated `tests/output/` artifacts stay gitignored.
+
+### Changed
+
+- **STT REST response** — documented that the API response no longer includes a `timestamp` field. It now returns `success`, `request_id`, and `transcript` plus metadata (`model`, `processing_time`, `end_to_end_latency`). Docstrings updated accordingly.
+- **PyPI publish** — the publish workflow now triggers on `v*.*.*` tag pushes (in addition to GitHub Releases), validates that the tag matches the `pyproject.toml` version, and runs `twine check` on the built distribution before uploading.
+
+### Notes
+
+- **TTS `oggopus` encoding** requires `container="raw"` (the API rejects `oggopus` with `container="ogg"`). The `ogg` container is not accepted for any encoding. Use `container="raw"` for Opus output and `container="wav"`/`"mp3"` for PCM output.
+
 ## [0.7.1] - 2026-07-02
 
 ### Changed

@@ -120,6 +120,21 @@ class SpeakerEmbedding:
         return {"embedding": self.embedding, "shape": self.shape, "dtype": self.dtype}
 
 
+def _ws_header_kwargs(headers: dict[str, str]) -> dict[str, Any]:
+    """Return the correct ``connect()`` header kwarg for the installed websockets.
+
+    websockets >= 13 renamed the ``extra_headers`` argument to
+    ``additional_headers``. Support both so the SDK works across versions,
+    e.g. when another dependency pins ``websockets < 13``.
+    """
+    try:
+        major = int(websockets.__version__.split(".", 1)[0])
+    except (AttributeError, ValueError):
+        major = 13
+    key = "additional_headers" if major >= 13 else "extra_headers"
+    return {key: headers}
+
+
 def _build_request_body(
     text: str,
     voice: str | None,
@@ -204,12 +219,13 @@ class GnaniTTSClient:
         base_url: str = DEFAULT_BASE_URL,
         timeout: int = 60,
     ):
-        self.api_key = api_key or os.getenv("GNANI_API_KEY", "")
-        if not self.api_key:
+        resolved_key = api_key if api_key else os.getenv("GNANI_API_KEY", "")
+        if not resolved_key:
             raise AuthenticationError(
                 "api_key is required. Pass it directly or set the "
                 "GNANI_API_KEY environment variable."
             )
+        self.api_key = resolved_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
@@ -348,13 +364,14 @@ def _parse_sse_lines(response: requests.Response) -> Iterator[bytes]:
     for raw_line in response.iter_lines(decode_unicode=True):
         if not raw_line:
             continue
+        line = raw_line.decode() if isinstance(raw_line, bytes) else raw_line
 
-        if raw_line.startswith("data:"):
-            raw_line = raw_line[len("data:") :].strip()
-        if raw_line.startswith("event:"):
+        if line.startswith("data:"):
+            line = line[len("data:") :].strip()
+        if line.startswith("event:"):
             continue
 
-        buf += raw_line
+        buf += line
         try:
             payload = json.loads(buf)
         except json.JSONDecodeError:
@@ -411,12 +428,13 @@ class GnaniTTSStreamClient:
         base_url: str = DEFAULT_BASE_URL,
         timeout: int = 60,
     ):
-        self.api_key = api_key or os.getenv("GNANI_API_KEY", "")
-        if not self.api_key:
+        resolved_key = api_key if api_key else os.getenv("GNANI_API_KEY", "")
+        if not resolved_key:
             raise AuthenticationError(
                 "api_key is required. Pass it directly or set the "
                 "GNANI_API_KEY environment variable."
             )
+        self.api_key = resolved_key
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
@@ -631,12 +649,13 @@ class GnaniTTSRealtimeClient:
         *,
         base_url: str = DEFAULT_BASE_URL,
     ):
-        self.api_key = api_key or os.getenv("GNANI_API_KEY", "")
-        if not self.api_key:
+        resolved_key = api_key if api_key else os.getenv("GNANI_API_KEY", "")
+        if not resolved_key:
             raise AuthenticationError(
                 "api_key is required. Pass it directly or set the "
                 "GNANI_API_KEY environment variable."
             )
+        self.api_key = resolved_key
 
         ws_scheme = "wss" if base_url.startswith("https") else "ws"
         host = base_url.replace("https://", "").replace("http://", "").rstrip("/")
@@ -702,7 +721,7 @@ class GnaniTTSRealtimeClient:
         try:
             ws = await websockets.connect(
                 self._ws_url,
-                additional_headers=self._build_headers(),
+                **_ws_header_kwargs(self._build_headers()),
                 ping_interval=20,
                 ping_timeout=20,
                 close_timeout=10,
@@ -798,7 +817,7 @@ class GnaniTTSRealtimeClient:
         try:
             ws = await websockets.connect(
                 self._ws_url,
-                additional_headers=self._build_headers(),
+                **_ws_header_kwargs(self._build_headers()),
                 ping_interval=20,
                 ping_timeout=20,
                 close_timeout=10,

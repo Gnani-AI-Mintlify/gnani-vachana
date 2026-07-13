@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "gnani"
+name = "gnani-vachana"
 version = "0.7.1"
 description = "Python client for Gnani's speech AI platform (STT, TTS, and more)"
 readme = "README.md"
@@ -36,12 +36,15 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "mypy>=1.0",
+    "types-requests>=2.28",
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "pytest-timeout>=2.1",
     "pytest-cov>=4.0",
     "python-dotenv>=1.0",
     "ruff>=0.4",
+    "build>=1.0",
+    "twine>=5.0",
 ]
 
 [project.urls]
@@ -52,6 +55,9 @@ Issues = "https://github.com/Gnani-AI-Mintlify/Gnani-Vachana/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["gnani"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/gnani"]
 
 # ---------------------------------------------------------------------------
 # Ruff (linter + formatter)
@@ -106,7 +112,7 @@ markers = [
 # Mypy (optional static type-checking)
 # ---------------------------------------------------------------------------
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

@@ -9,7 +9,8 @@ import os
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Union
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Union, cast
 
 import requests
 import websockets
@@ -65,8 +66,59 @@ STT_STREAM_ENDPOINT = "/stt/v3/stream"
 
 SAMPLE_RATE_16K = 16_000
 SAMPLE_RATE_8K = 8_000
+SAMPLE_RATE_44K = 44_100
+SAMPLE_RATE_48K = 48_000
+# Sample rates accepted by the Realtime WebSocket (x-sample-rate header).
+# See https://docs.gnani.ai/api/STT/stt-websocket (Connection Headers).
+STREAM_SUPPORTED_SAMPLE_RATES = (
+    SAMPLE_RATE_8K,
+    SAMPLE_RATE_16K,
+    SAMPLE_RATE_44K,
+    SAMPLE_RATE_48K,
+)
 STREAM_CHUNK_SAMPLES = 512
 STREAM_CHUNK_BYTES = STREAM_CHUNK_SAMPLES * 2  # 16-bit = 2 bytes per sample
+
+# Single-language codes accepted by the REST endpoint. A comma-separated
+# combination of these enables server-side auto-detection.
+# See https://docs.gnani.ai/api/STT/speech-to-text
+REST_SINGLE_LANGUAGES = {
+    code: name for code, name in SUPPORTED_LANGUAGES.items() if "," not in code
+}
+
+
+def _validate_rest_language_code(language_code: str) -> None:
+    """Validate a REST ``language_code``.
+
+    Accepts a single supported code (e.g. ``"hi-IN"``), a pre-defined combo
+    from ``SUPPORTED_LANGUAGES``, or any comma-separated combination of
+    supported single codes (e.g. ``"en-IN,ta-IN"``) to enable auto-detection.
+    """
+    if language_code in SUPPORTED_LANGUAGES:
+        return
+    parts = [p.strip() for p in language_code.split(",") if p.strip()]
+    if len(parts) >= 2 and all(p in REST_SINGLE_LANGUAGES for p in parts):
+        return
+    raise ValueError(
+        f"Unsupported language_code '{language_code}'. "
+        f"Choose from: {', '.join(sorted(REST_SINGLE_LANGUAGES))} "
+        f"or a comma-separated combination of these for auto-detection."
+    )
+
+
+def _ws_header_kwargs(headers: dict[str, str]) -> dict[str, Any]:
+    """Return the correct ``connect()`` header kwarg for the installed websockets.
+
+    websockets >= 13 renamed the ``extra_headers`` argument to
+    ``additional_headers``. Support both so the SDK works across versions,
+    e.g. when another dependency pins ``websockets < 13``.
+    """
+    try:
+        major = int(websockets.__version__.split(".", 1)[0])
+    except (AttributeError, ValueError):
+        major = 13
+    key = "additional_headers" if major >= 13 else "extra_headers"
+    return {key: headers}
 
 
 # ---------------------------------------------------------------------------
@@ -193,15 +245,15 @@ class GnaniSTTClient:
         base_url: str = DEFAULT_BASE_URL,
         timeout: int = 60,
     ):
-        self.api_key = api_key or os.getenv("GNANI_API_KEY", "")
-        self.base_url = base_url.rstrip("/")
-        self.timeout = timeout
-
-        if not self.api_key:
+        resolved_key = api_key if api_key else os.getenv("GNANI_API_KEY", "")
+        if not resolved_key:
             raise AuthenticationError(
                 "api_key is required. "
                 "Pass it directly or set the GNANI_API_KEY environment variable."
             )
+        self.api_key = resolved_key
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
 
     def _build_headers(self, request_id: str | None = None) -> dict[str, str]:
         return {
@@ -251,7 +303,9 @@ class GnaniSTTClient:
         -------
         dict
             The parsed JSON response from the API, containing at minimum
-            ``success``, ``request_id``, ``timestamp``, and ``transcript``.
+            ``success``, ``request_id``, and ``transcript``, plus response
+            metadata such as ``model``, ``processing_time``, and
+            ``end_to_end_latency``.
 
         Raises
         ------
@@ -260,17 +314,13 @@ class GnaniSTTClient:
         APIError
             If the API returns a non-200 response.
         """
-        if language_code not in SUPPORTED_LANGUAGES:
-            raise ValueError(
-                f"Unsupported language_code '{language_code}'. "
-                f"Choose from: {', '.join(sorted(SUPPORTED_LANGUAGES))}"
-            )
+        _validate_rest_language_code(language_code)
 
         if format not in ("verbatim", "transcribe"):
             raise ValueError(f"format must be 'verbatim' or 'transcribe', got '{format}'")
 
         headers = self._build_headers(request_id)
-        file_handle = None
+        file_handle: BinaryIO | None = None
         should_close = False
 
         try:
@@ -311,7 +361,7 @@ class GnaniSTTClient:
         if response.status_code != 200:
             raise APIError(response.status_code, response.text)
 
-        return response.json()
+        return cast("dict[str, Any]", response.json())
 
     def transcribe_bytes(
         self,
@@ -349,11 +399,7 @@ class GnaniSTTClient:
         dict
             Parsed JSON response from the API.
         """
-        if language_code not in SUPPORTED_LANGUAGES:
-            raise ValueError(
-                f"Unsupported language_code '{language_code}'. "
-                f"Choose from: {', '.join(sorted(SUPPORTED_LANGUAGES))}"
-            )
+        _validate_rest_language_code(language_code)
 
         if format not in ("verbatim", "transcribe"):
             raise ValueError(f"format must be 'verbatim' or 'transcribe', got '{format}'")
@@ -379,7 +425,7 @@ class GnaniSTTClient:
         if response.status_code != 200:
             raise APIError(response.status_code, response.text)
 
-        return response.json()
+        return cast("dict[str, Any]", response.json())
 
     @staticmethod
     def supported_languages() -> dict[str, str]:
@@ -456,8 +502,9 @@ class GnaniSTTStreamClient:
         ``"hi-IN"`` or pass ``GnaniSTTStreamClient.AUTO_DETECT`` for
         automatic language detection. Defaults to ``"en-IN"``.
     sample_rate : int
-        Audio sample rate in Hz. Must be ``16000`` or ``8000``.
-        Defaults to ``16000``.
+        Audio sample rate in Hz. One of ``8000``, ``16000``, ``44100``, or
+        ``48000``. Defaults to ``16000``. Note the PCM frame spec (512 samples
+        / 1024 bytes) is defined for 8 kHz and 16 kHz.
     base_url : str, optional
         Override the default WebSocket base URL.
     preferred_language : str, optional
@@ -501,17 +548,17 @@ class GnaniSTTStreamClient:
         format: str = "verbatim",
         itn_native_numerals: bool = False,
     ):
-        self.api_key = api_key or os.getenv("GNANI_API_KEY", "")
-        if not self.api_key:
+        resolved_key = api_key if api_key else os.getenv("GNANI_API_KEY", "")
+        if not resolved_key:
             raise AuthenticationError(
                 "api_key is required. Pass it directly or set the "
                 "GNANI_API_KEY environment variable."
             )
+        self.api_key = resolved_key
 
-        if sample_rate not in (SAMPLE_RATE_16K, SAMPLE_RATE_8K):
-            raise ValueError(
-                f"sample_rate must be {SAMPLE_RATE_16K} or {SAMPLE_RATE_8K}, got {sample_rate}"
-            )
+        if sample_rate not in STREAM_SUPPORTED_SAMPLE_RATES:
+            allowed = ", ".join(str(r) for r in STREAM_SUPPORTED_SAMPLE_RATES)
+            raise ValueError(f"sample_rate must be one of {allowed}, got {sample_rate}")
 
         # Allow auto-detect string or any single supported code
         if (
@@ -537,7 +584,7 @@ class GnaniSTTStreamClient:
         host = base_url.replace("https://", "").replace("http://", "").rstrip("/")
         self._ws_url = f"{ws_scheme}://{host}{STT_STREAM_ENDPOINT}"
 
-        self._ws: websockets.WebSocketClientProtocol | None = None
+        self._ws: websockets.ClientConnection | None = None
         self._connected_event: StreamConnectedEvent | None = None
         self._receive_task: asyncio.Task | None = None
         self._events: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
@@ -603,7 +650,7 @@ class GnaniSTTStreamClient:
         try:
             self._ws = await websockets.connect(
                 self._ws_url,
-                additional_headers=headers,
+                **_ws_header_kwargs(headers),
                 ping_interval=20,
                 ping_timeout=20,
                 close_timeout=10,
@@ -646,7 +693,10 @@ class GnaniSTTStreamClient:
         """
         if not self.is_connected:
             raise StreamClosedError("Stream is not connected. Call connect() first.")
-        await self._ws.send(audio_chunk)
+        ws = self._ws
+        if ws is None:
+            raise StreamClosedError("Stream is not connected. Call connect() first.")
+        await ws.send(audio_chunk)
 
     async def close(self) -> list[StreamTranscriptEvent]:
         """Gracefully close the WebSocket connection.
@@ -693,7 +743,12 @@ class GnaniSTTStreamClient:
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         await self.close()
 
     # -- Callback-based convenience ------------------------------------------
@@ -740,7 +795,7 @@ class GnaniSTTStreamClient:
 
         seconds_per_chunk = chunk_size / 2 / self.sample_rate
 
-        async def _send():
+        async def _send() -> None:
             if hasattr(audio_source, "__aiter__"):
                 async for chunk in audio_source:
                     if not self.is_connected:
@@ -759,7 +814,7 @@ class GnaniSTTStreamClient:
                     if realtime_pace:
                         await asyncio.sleep(seconds_per_chunk)
 
-        async def _receive():
+        async def _receive() -> None:
             async for event in self.events():
                 if isinstance(event, StreamTranscriptEvent) and on_transcript:
                     on_transcript(event)
@@ -788,8 +843,11 @@ class GnaniSTTStreamClient:
 
     async def _receive_loop(self) -> None:
         """Background task that reads messages from the WebSocket."""
+        ws = self._ws
+        if ws is None:
+            return
         try:
-            async for raw_msg in self._ws:
+            async for raw_msg in ws:
                 if isinstance(raw_msg, str):
                     event = _parse_stream_message(raw_msg)
                     if isinstance(event, StreamTranscriptEvent):
