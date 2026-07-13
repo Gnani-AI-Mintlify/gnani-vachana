@@ -34,12 +34,6 @@ DEFAULT_MODEL = "vachana-voice-v3"
 
 SUPPORTED_VOICES = frozenset(
     {
-        "Karan",
-        "Simran",
-        "Nara",
-        "Riya",
-        "Viraj",
-        "Raju",
         "Pranav",
         "Kaveri",
         "Shubhra",
@@ -198,7 +192,7 @@ class GnaniTTSClient:
     ::
 
         client = GnaniTTSClient(api_key="key")
-        audio_bytes = client.synthesize("नमस्ते, आप कैसे हैं?", voice="Karan")
+        audio_bytes = client.synthesize("नमस्ते, आप कैसे हैं?", voice="Pranav")
         with open("output.wav", "wb") as f:
             f.write(audio_bytes)
     """
@@ -228,7 +222,7 @@ class GnaniTTSClient:
     def synthesize(
         self,
         text: str,
-        voice: str | None = "Karan",
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
@@ -242,9 +236,9 @@ class GnaniTTSClient:
         text : str
             The text to synthesise.
         voice : str, optional
-            Pre-defined voice ID (e.g. ``"Karan"``, ``"Simran"``, ``"Riya"``).
-            See ``SUPPORTED_VOICES`` for the full list.
-            Ignored when ``speaker_embedding`` is provided. Defaults to ``"Karan"``.
+            Pre-defined voice ID (e.g. ``"Pranav"``, ``"Kaveri"``).
+            See https://docs.gnani.ai/api/TTS/tts-sse#available-voices
+            Ignored when ``speaker_embedding`` is provided. Defaults to ``"Pranav"``.
         model : str
             TTS model to use. Defaults to ``"vachana-voice-v3"``.
         audio_config : AudioConfig, optional
@@ -407,7 +401,7 @@ class GnaniTTSStreamClient:
     Save a complete WAV file::
 
         client = GnaniTTSStreamClient(api_key="key")
-        audio = client.synthesize("Hello!", voice="Karan", output_file="output.wav")
+        audio = client.synthesize("Hello!", voice="Pranav", output_file="output.wav")
     """
 
     def __init__(
@@ -435,7 +429,7 @@ class GnaniTTSStreamClient:
     def synthesize_stream(
         self,
         text: str,
-        voice: str | None = "Karan",
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
@@ -451,7 +445,7 @@ class GnaniTTSStreamClient:
         text : str
             The text to synthesise.
         voice : str, optional
-            Pre-defined voice ID. Defaults to ``"Karan"``.
+            Pre-defined voice ID. Defaults to ``"Pranav"``.
         model : str
             TTS model to use. Defaults to ``"vachana-voice-v3"``.
         audio_config : AudioConfig, optional
@@ -493,7 +487,7 @@ class GnaniTTSStreamClient:
     def synthesize(
         self,
         text: str,
-        voice: str | None = "Karan",
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
@@ -621,14 +615,14 @@ class GnaniTTSRealtimeClient:
         async with GnaniTTSRealtimeClient(api_key="key") as client:
             with open("output.wav", "wb") as f:
                 async for chunk in client.synthesize(
-                    "नमस्ते, आप कैसे हैं?", voice="Karan"
+                    "नमस्ते, आप कैसे हैं?", voice="Pranav"
                 ):
                     f.write(chunk)
 
     Collect full audio in one call::
 
         async with GnaniTTSRealtimeClient(api_key="key") as client:
-            audio = await client.synthesize_and_collect("Hello!", voice="Karan")
+            audio = await client.synthesize_and_collect("Hello!", voice="Pranav")
     """
 
     def __init__(
@@ -657,7 +651,7 @@ class GnaniTTSRealtimeClient:
     async def synthesize(
         self,
         text: str,
-        voice: str | None = "Karan",
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
@@ -674,7 +668,7 @@ class GnaniTTSRealtimeClient:
         text : str
             The text to synthesise.
         voice : str, optional
-            Pre-defined voice ID. Defaults to ``"Karan"``.
+            Pre-defined voice ID. Defaults to ``"Pranav"``.
         model : str
             TTS model to use. Defaults to ``"vachana-voice-v3"``.
         audio_config : AudioConfig, optional
@@ -756,7 +750,7 @@ class GnaniTTSRealtimeClient:
     async def synthesize_events(
         self,
         text: str,
-        voice: str | None = "Karan",
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,
@@ -774,7 +768,7 @@ class GnaniTTSRealtimeClient:
         text : str
             The text to synthesise.
         voice : str, optional
-            Pre-defined voice ID. Defaults to ``"Karan"``.
+            Pre-defined voice ID. Defaults to ``"Pranav"``.
         model : str
             TTS model to use. Defaults to ``"vachana-voice-v3"``.
         audio_config : AudioConfig, optional
@@ -878,7 +872,7 @@ class GnaniTTSRealtimeClient:
     async def synthesize_and_collect(
         self,
         text: str,
-        voice: str | None = "Karan",
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         audio_config: AudioConfig | None = None,

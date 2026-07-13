@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-07-02
+
+### Changed
+
+- **TTS voices** — updated to 4 official voices: Pranav, Kaveri, Shubhra, Deepak. Removed legacy voices (Karan, Simran, Nara, Riya, Viraj, Raju). Default voice changed from `"Karan"` to `"Pranav"`. See [Available Voices](https://docs.gnani.ai/api/TTS/tts-sse#available-voices).
+
+## [0.7.0] - 2026-07-01
+
+### Added
+
+- Comprehensive QA test suite, `Makefile`, versioning scripts.
+- Docstring updates (Google-style), ruff ignore rules for pre-existing patterns.
+
 ## [0.6.0] - 2026-06-24
 
 ### Changed

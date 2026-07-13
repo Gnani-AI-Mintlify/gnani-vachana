@@ -56,7 +56,7 @@ from gnani.tts import GnaniTTSClient, AudioConfig
 client = GnaniTTSClient(api_key="your-api-key")
 audio = client.synthesize(
     "नमस्ते, आप कैसे हैं?",
-    voice="Karan",
+    voice="Pranav",
     audio_config=AudioConfig(sample_rate=44100, encoding="linear_pcm", container="wav"),
 )
 
@@ -70,7 +70,7 @@ with open("tts_output.wav", "wb") as f:
 from gnani.tts import GnaniTTSStreamClient
 
 client = GnaniTTSStreamClient(api_key="your-api-key")
-audio = client.synthesize("Hello from Gnani TTS", voice="Karan", output_file="tts_sse.wav")
+audio = client.synthesize("Hello from Gnani TTS", voice="Pranav", output_file="tts_sse.wav")
 ```
 
 ### TTS Realtime WebSocket (lowest latency)
@@ -82,7 +82,7 @@ from gnani.tts import GnaniTTSRealtimeClient
 async def main():
     async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
         audio = await client.synthesize_and_collect(
-            "Hello from Gnani TTS", voice="Karan", output_file="tts_realtime.wav",
+            "Hello from Gnani TTS", voice="Pranav", output_file="tts_realtime.wav",
         )
 
 asyncio.run(main())
@@ -157,14 +157,14 @@ stream = GnaniSTTStreamClient(api_key="key", language_code=GnaniSTTStreamClient.
 
 ### TTS Voices
 
+See the [official voice list](https://docs.gnani.ai/api/TTS/tts-sse#available-voices) for the latest supported voices.
+
 | Voice   | Gender | Description              |
 |---------|--------|--------------------------|
-| Karan   | Male   | Bold, Trustworthy        |
-| Simran  | Female | Confident, Bright        |
-| Nara    | Female | Gentle, Expressive       |
-| Riya    | Female | Cheerful, Energetic      |
-| Viraj   | Male   | Commanding, Dynamic      |
-| Raju    | Male   | Grounded, Conversational |
+| Pranav  | Male   | Bold, Trustworthy        |
+| Kaveri  | Female | Confident, Bright        |
+| Shubhra | Female | Gentle, Expressive       |
+| Deepak  | Male   | Grounded, Conversational |
 
 ### TTS Languages (Text-to-Speech)
 
@@ -345,7 +345,7 @@ async for event in stream:
 from gnani.tts import GnaniTTSClient
 
 client = GnaniTTSClient(api_key="your-api-key")
-audio = client.synthesize("यह एक टेस्ट है", voice="Karan")
+audio = client.synthesize("यह एक टेस्ट है", voice="Pranav")
 with open("tts_rest.wav", "wb") as f:
     f.write(audio)
 ```
@@ -371,7 +371,7 @@ audio = client.synthesize(
 For raw PCM streaming (e.g. real-time playback), use `synthesize_stream()`:
 
 ```python
-for pcm_chunk in client.synthesize_stream("Hello!", voice="Karan"):
+for pcm_chunk in client.synthesize_stream("Hello!", voice="Pranav"):
     play_audio(pcm_chunk)  # raw PCM, no WAV header
 ```
 
@@ -388,7 +388,7 @@ async def main():
         # synthesize_and_collect() returns a valid WAV file
         audio = await client.synthesize_and_collect(
             "Realtime TTS response",
-            voice="Simran",
+            voice="Kaveri",
             audio_config=AudioConfig(sample_rate=16000, encoding="linear_pcm", container="wav"),
             output_file="tts_realtime.wav",
         )
@@ -400,7 +400,7 @@ For raw PCM streaming (e.g. real-time playback):
 
 ```python
 async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
-    async for pcm_chunk in client.synthesize("Hello!", voice="Karan"):
+    async for pcm_chunk in client.synthesize("Hello!", voice="Pranav"):
         play_audio(pcm_chunk)  # raw PCM, no WAV header
 ```
 
@@ -414,7 +414,7 @@ from gnani.tts import GnaniTTSClient
 print(GnaniTTSClient.supported_voices())
 ```
 
-Available voices: `Karan`, `Simran`, `Nara`, `Riya`, `Viraj`, `Raju`.
+Available voices: `Pranav`, `Kaveri`, `Shubhra`, `Deepak`. See the [official voice list](https://docs.gnani.ai/api/TTS/tts-sse#available-voices).
 
 ## Audio Requirements
 
