@@ -52,7 +52,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/gnani
+      url: https://pypi.org/p/gnani-vachana
     permissions:
       id-token: write
     steps:
