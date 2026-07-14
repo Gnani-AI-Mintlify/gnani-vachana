@@ -59,6 +59,9 @@ packages = ["gnani"]
 [tool.hatch.build.targets.sdist]
 include = ["/gnani"]
 
+[tool.uv]
+package = true
+
 # ---------------------------------------------------------------------------
 # Ruff (linter + formatter)
 # ---------------------------------------------------------------------------

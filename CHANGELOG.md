@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Local development uses [uv](https://docs.astral.sh/uv/)** — `scripts/setup.sh` creates `.venv` with `uv venv` and installs via `uv sync --extra dev`. `Makefile`, `release.sh`, and CI workflows use `uv run`. `uv.lock` is generated locally for reproducible installs.
+
 ## [0.7.2] - 2026-07-14
 
 ### Fixed

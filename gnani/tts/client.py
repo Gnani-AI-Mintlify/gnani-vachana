@@ -10,7 +10,7 @@ import struct
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any, Union, cast
 
 import requests
 import websockets
@@ -291,7 +291,7 @@ class GnaniTTSClient:
         if response.status_code != 200:
             raise APIError(response.status_code, response.text)
 
-        audio = response.content
+        audio = cast("bytes", response.content)
         if output_file is not None:
             _save_audio(audio, output_file)
         return audio

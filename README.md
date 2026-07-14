@@ -11,6 +11,12 @@ Official Python client by [Gnani.ai](https://gnani.ai). Build multilingual voice
 pip install gnani-vachana
 ```
 
+Or with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv add gnani-vachana
+```
+
 Requires **Python 3.9+**.
 
 ## Quick Start
