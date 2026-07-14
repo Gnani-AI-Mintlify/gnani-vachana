@@ -104,7 +104,7 @@ All APIs (STT REST, STT Realtime, TTS) require a single API key:
 
 ### Obtaining Credentials
 
-Email **[speechstack@gnani.ai](mailto:speechstack@gnani.ai)** with your name, company, and use case. Credentials are typically provisioned within 1 business day, and all new accounts receive **free credits** -- no credit card required.
+You need a Gnani API key. [Gnani APIs](https://app.gnani.ai/voice) have this.
 
 ### Passing Credentials
 
