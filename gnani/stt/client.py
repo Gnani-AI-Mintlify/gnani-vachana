@@ -38,7 +38,6 @@ SUPPORTED_LANGUAGES = {
     "bn-IN": "Bengali",
     "ml-IN": "Malayalam",
     "pa-IN": "Punjabi",
-    "en-IN,hi-IN": "English-Hindi",
 }
 
 STREAM_SUPPORTED_LANGUAGES = {
@@ -52,11 +51,7 @@ STREAM_SUPPORTED_LANGUAGES = {
     "pa-IN": "Punjabi",
     "ta-IN": "Tamil",
     "te-IN": "Telugu",
-    "en-hi-IN-latn": "Hinglish (Latin script, experimental)",
-    "en-hi-in-cm": "Hinglish (Code-mixed, experimental)",
 }
-
-AUTO_DETECT_LANGUAGES = ",".join(k for k in STREAM_SUPPORTED_LANGUAGES if not k.startswith("en-hi"))
 
 SUPPORTED_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac"}
 
@@ -79,30 +74,17 @@ STREAM_SUPPORTED_SAMPLE_RATES = (
 STREAM_CHUNK_SAMPLES = 512
 STREAM_CHUNK_BYTES = STREAM_CHUNK_SAMPLES * 2  # 16-bit = 2 bytes per sample
 
-# Single-language codes accepted by the REST endpoint. A comma-separated
-# combination of these enables server-side auto-detection.
-# See https://docs.gnani.ai/api/STT/speech-to-text
-REST_SINGLE_LANGUAGES = {
-    code: name for code, name in SUPPORTED_LANGUAGES.items() if "," not in code
-}
-
 
 def _validate_rest_language_code(language_code: str) -> None:
     """Validate a REST ``language_code``.
 
-    Accepts a single supported code (e.g. ``"hi-IN"``), a pre-defined combo
-    from ``SUPPORTED_LANGUAGES``, or any comma-separated combination of
-    supported single codes (e.g. ``"en-IN,ta-IN"``) to enable auto-detection.
+    Accepts a single supported BCP-47 code (e.g. ``"hi-IN"``).
     """
     if language_code in SUPPORTED_LANGUAGES:
         return
-    parts = [p.strip() for p in language_code.split(",") if p.strip()]
-    if len(parts) >= 2 and all(p in REST_SINGLE_LANGUAGES for p in parts):
-        return
     raise ValueError(
         f"Unsupported language_code '{language_code}'. "
-        f"Choose from: {', '.join(sorted(REST_SINGLE_LANGUAGES))} "
-        f"or a comma-separated combination of these for auto-detection."
+        f"Choose from: {', '.join(sorted(SUPPORTED_LANGUAGES))}"
     )
 
 
@@ -266,7 +248,6 @@ class GnaniSTTClient:
         audio: Union[str, Path, BinaryIO],
         language_code: str = "en-IN",
         *,
-        preferred_language: str | None = None,
         format: str = "verbatim",
         itn_native_numerals: bool = False,
         request_id: str | None = None,
@@ -279,12 +260,7 @@ class GnaniSTTClient:
             Path to an audio file, or an open file-like object (binary mode).
         language_code : str
             BCP-47 style language code. See ``SUPPORTED_LANGUAGES`` for the
-            full list. Defaults to ``"en-IN"``. Pass a comma-separated list
-            for auto-detection (e.g. ``"en-IN,hi-IN"``).
-        preferred_language : str, optional
-            Force the single-language model for this code even when multiple
-            languages are specified in ``language_code``. Must be one of the
-            codes in ``language_code``.
+            full list. Defaults to ``"en-IN"``.
         format : str
             ``"verbatim"`` (default) returns raw spoken-form output.
             ``"transcribe"`` enables Inverse Text Normalization (ITN):
@@ -342,8 +318,6 @@ class GnaniSTTClient:
             files = {"audio_file": file_handle}
             data: dict[str, Any] = {"language_code": language_code, "format": format}
 
-            if preferred_language is not None:
-                data["preferred_language"] = preferred_language
             if itn_native_numerals:
                 data["itn_native_numerals"] = "true"
 
@@ -369,7 +343,6 @@ class GnaniSTTClient:
         filename: str = "audio.wav",
         language_code: str = "en-IN",
         *,
-        preferred_language: str | None = None,
         format: str = "verbatim",
         itn_native_numerals: bool = False,
         request_id: str | None = None,
@@ -384,9 +357,6 @@ class GnaniSTTClient:
             Filename hint so the server can infer the format.
         language_code : str
             Target language code.
-        preferred_language : str, optional
-            Force the single-language model for this code even when multiple
-            languages are specified in ``language_code``.
         format : str
             ``"verbatim"`` (default) or ``"transcribe"`` (enables ITN).
         itn_native_numerals : bool
@@ -409,8 +379,6 @@ class GnaniSTTClient:
         files = {"audio_file": (filename, audio_bytes)}
         data: dict[str, Any] = {"language_code": language_code, "format": format}
 
-        if preferred_language is not None:
-            data["preferred_language"] = preferred_language
         if itn_native_numerals:
             data["itn_native_numerals"] = "true"
 
@@ -498,19 +466,14 @@ class GnaniSTTStreamClient:
     api_key : str
         Your API key (sent as ``x-api-key-id`` header).
     language_code : str
-        BCP-47 language code for transcription. Use a single code like
-        ``"hi-IN"`` or pass ``GnaniSTTStreamClient.AUTO_DETECT`` for
-        automatic language detection. Defaults to ``"en-IN"``.
+        BCP-47 language code for transcription (e.g. ``"hi-IN"``).
+        Defaults to ``"en-IN"``.
     sample_rate : int
         Audio sample rate in Hz. One of ``8000``, ``16000``, ``44100``, or
         ``48000``. Defaults to ``16000``. Note the PCM frame spec (512 samples
         / 1024 bytes) is defined for 8 kHz and 16 kHz.
     base_url : str, optional
         Override the default WebSocket base URL.
-    preferred_language : str, optional
-        Force the single-language model for this code even when multiple
-        languages are specified in ``language_code``. Sent as the
-        ``preferred_language`` connection header.
     format : str
         ``"verbatim"`` (default) or ``"transcribe"`` (enables ITN).
     itn_native_numerals : bool
@@ -535,8 +498,6 @@ class GnaniSTTStreamClient:
             results = await stream.close()
     """
 
-    AUTO_DETECT = AUTO_DETECT_LANGUAGES
-
     def __init__(
         self,
         api_key: str | None = None,
@@ -544,7 +505,6 @@ class GnaniSTTStreamClient:
         *,
         sample_rate: int = SAMPLE_RATE_16K,
         base_url: str = DEFAULT_BASE_URL,
-        preferred_language: str | None = None,
         format: str = "verbatim",
         itn_native_numerals: bool = False,
     ):
@@ -560,15 +520,10 @@ class GnaniSTTStreamClient:
             allowed = ", ".join(str(r) for r in STREAM_SUPPORTED_SAMPLE_RATES)
             raise ValueError(f"sample_rate must be one of {allowed}, got {sample_rate}")
 
-        # Allow auto-detect string or any single supported code
-        if (
-            language_code != AUTO_DETECT_LANGUAGES
-            and language_code not in STREAM_SUPPORTED_LANGUAGES
-        ):
+        if language_code not in STREAM_SUPPORTED_LANGUAGES:
             raise ValueError(
                 f"Unsupported language_code '{language_code}'. "
-                f"Choose from: {', '.join(sorted(STREAM_SUPPORTED_LANGUAGES))} "
-                f"or use GnaniSTTStreamClient.AUTO_DETECT for auto-detection."
+                f"Choose from: {', '.join(sorted(STREAM_SUPPORTED_LANGUAGES))}"
             )
 
         if format not in ("verbatim", "transcribe"):
@@ -576,7 +531,6 @@ class GnaniSTTStreamClient:
 
         self.language_code = language_code
         self.sample_rate = sample_rate
-        self.preferred_language = preferred_language
         self.format = format
         self.itn_native_numerals = itn_native_numerals
 
@@ -642,8 +596,6 @@ class GnaniSTTStreamClient:
         }
         if self.format != "verbatim":
             headers["x-format"] = self.format
-        if self.preferred_language is not None:
-            headers["preferred_language"] = self.preferred_language
         if self.itn_native_numerals:
             headers["itn_native_numerals"] = "true"
 

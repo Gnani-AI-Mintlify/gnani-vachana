@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.7.5] - 2026-07-14
 
+### Removed
+
+- **Code-switching and auto-detect language modes** — REST and WebSocket STT now accept only single BCP-47 language codes (e.g. `"hi-IN"`). Removed comma-separated `language_code` values, `GnaniSTTStreamClient.AUTO_DETECT`, and the `preferred_language` parameter.
 ## [0.7.4] - 2026-07-14
 
 ## [0.7.3] - 2026-07-14
@@ -155,7 +158,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Async context manager and async iterator support for the streaming client.
 - `stream_audio()` high-level helper with callback support for transcript, processing, and error events.
 - Support for 8 kHz and 16 kHz audio sample rates in streaming mode.
-- New experimental language codes for streaming: `en-hi-IN-latn` (Hinglish Latin), `en-hi-in-cm` (Hinglish code-mixed).
 - Auto-detect language mode via `GnaniSTTStreamClient.AUTO_DETECT`.
 - New exceptions: `StreamConnectionError`, `StreamClosedError`, `StreamError`.
 - `STREAM_SUPPORTED_LANGUAGES`, `SAMPLE_RATE_16K`, `SAMPLE_RATE_8K`, `STREAM_CHUNK_BYTES`, `STREAM_CHUNK_SAMPLES` constants.
@@ -172,7 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release of the `gnani` (formerly `gnani-vachana`) Python SDK.
 - `GnaniSTTClient` for REST-based file transcription.
-- Support for 10 Indian languages plus English-Hindi code-switching.
+- Support for 10 Indian languages with multilingual auto-detection.
 - `transcribe()` and `transcribe_bytes()` methods.
 - Header-based authentication with environment variable fallback.
 - Custom exceptions: `GnaniSTTError`, `AuthenticationError`, `InvalidAudioError`, `APIError`.

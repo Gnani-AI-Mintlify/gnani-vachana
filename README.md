@@ -3,7 +3,7 @@
 
 Official Python client by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
 
-> **[Gnani.ai](https://gnani.ai)** is a production-ready speech AI platform with high-accuracy STT and low-latency TTS for 10+ Indian languages, with 6 voices, multilingual and code-switching scenarios.
+> **[Gnani.ai](https://gnani.ai)** is a production-ready speech AI platform with high-accuracy STT and low-latency TTS for 10+ Indian languages, with 6 voices.
 
 ## Installation
 
@@ -144,20 +144,6 @@ STT uses BCP-47 locale codes (e.g. `hi-IN`). For the full list of supported lang
 
 - **[STT REST — Supported Languages](https://docs.gnani.ai/api/STT/speech-to-text#supported-languages)**
 - **[STT Realtime — Supported Languages](https://docs.gnani.ai/api/STT/stt-websocket#supported-languages)**
-
-**Code-switching** — pass comma-separated codes for multilingual audio:
-
-```python
-result = client.transcribe("meeting.wav", language_code="en-IN,hi-IN")
-```
-
-**Auto-detect (streaming only):**
-
-```python
-from gnani.stt import GnaniSTTStreamClient
-
-stream = GnaniSTTStreamClient(api_key="key", language_code=GnaniSTTStreamClient.AUTO_DETECT)
-```
 
 ---
 
