@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.7] - 2026-07-15
+
+### Added
+
+- **Timbre TTS models** — `timbre-v2.0` (default) and `timbre-v2.5` are the supported model IDs.
+- **`timbre-v2.5` voice catalog** — 42 Timbre voices across Hindi, English, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali, Gujarati, Punjabi, and Hinglish (`TIMBRE_V25_VOICES`).
+- **Timbre v2.5 request controls** — optional `language` parameter on all TTS clients (REST, SSE, WebSocket), **only when `model="timbre-v2.5"`**.
+- **Timbre test suite** — `test_tts_timbre_v25_*` pytest files and `test_tts_timbre_v25.py` standalone script mirroring the existing REST/SSE/WebSocket test layout.
+
+### Changed
+
+- **BREAKING:** `vachana-voice-v3` has been **renamed to `timbre-v2.0`**. The old name is no longer accepted — update `model="vachana-voice-v3"` to `model="timbre-v2.0"` or omit `model` to use the default.
+- `GnaniTTSClient.supported_voices()` accepts an optional `model` argument to return the voice catalog for `timbre-v2.0` or `timbre-v2.5`.
+- Voice validation is now model-aware; legacy voices (`Shubhra`, etc.) are valid only for `timbre-v2.0`.
+- **README** and **DEVELOPMENT.md** document Timbre models, voice catalogs, optional controls, and the new test layout.
+
+### Removed
+
+- **`vachana-voice-v3` model ID** — replaced by `timbre-v2.0`.
+- **`MODEL_ALIASES`** — no longer exported; there is no client-side alias for the old name.
+
 ## [0.7.6] - 2026-07-15
 
 ## [0.7.5] - 2026-07-14

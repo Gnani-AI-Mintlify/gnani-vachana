@@ -30,9 +30,9 @@ TTS_ENDPOINT = "/api/v1/tts/inference"
 TTS_SSE_ENDPOINT = "/api/v1/tts/sse"
 TTS_WS_ENDPOINT = "/api/v1/tts"
 
-DEFAULT_MODEL = "vachana-voice-v3"
+DEFAULT_MODEL = "timbre-v2.0"
 
-SUPPORTED_VOICES = frozenset(
+TIMBRE_V20_VOICES = frozenset(
     {
         "Pranav",
         "Kaveri",
@@ -41,10 +41,89 @@ SUPPORTED_VOICES = frozenset(
     }
 )
 
+TIMBRE_V25_VOICES = frozenset(
+    {
+        # Hindi (13)
+        "Nalini",
+        "Bhavna",
+        "Yashvi",
+        "Urmila",
+        "Jwala",
+        "Chitra",
+        "Ambuja",
+        "Deepak",
+        "Roopesh",
+        "Vikrant",
+        "Hemraj",
+        "Jalaj",
+        "Omkar",
+        # English (6)
+        "Kaveri",
+        "Trupti",
+        "Devika",
+        "Pranav",
+        "Shlok",
+        "Girish",
+        # Tamil (5)
+        "Asmita",
+        "Trisha",
+        "Brinda",
+        "Vedika",
+        "Noopur",
+        # Telugu (5)
+        "Suhana",
+        "Lehara",
+        "Lavanya",
+        "Yukti",
+        "Varuni",
+        # Kannada (2)
+        "Saanvi",
+        "Kavin",
+        # Malayalam (2)
+        "Reshma",
+        "Riyaan",
+        # Marathi (2)
+        "Zahira",
+        "Ishaan",
+        # Bengali (2)
+        "Kirra",
+        "Dhruva",
+        # Gujarati (2)
+        "Falak",
+        "Veera",
+        # Punjabi (2)
+        "Mehuli",
+        "Zayan",
+        # Hinglish (1)
+        "Poorvi",
+    }
+)
+
+# Backward-compatible alias for timbre-v2.0 voices.
+SUPPORTED_VOICES = TIMBRE_V20_VOICES
+
+TIMBRE_MODELS = frozenset({"timbre-v2.0", "timbre-v2.5"})
+SUPPORTED_MODELS = TIMBRE_MODELS
+
+SUPPORTED_TTS_LANGUAGES = frozenset(
+    {
+        "auto",
+        "hi-IN",
+        "en-IN",
+        "ta-IN",
+        "te-IN",
+        "kn-IN",
+        "ml-IN",
+        "mr-IN",
+        "bn-IN",
+        "gu-IN",
+        "pa-IN",
+    }
+)
+
 SUPPORTED_ENCODINGS = frozenset({"linear_pcm", "oggopus"})
 SUPPORTED_CONTAINERS = frozenset({"raw", "mp3", "wav", "mulaw", "ogg"})
 SUPPORTED_BITRATES = frozenset({"96k", "128k", "192k"})
-SUPPORTED_MODELS = frozenset({"vachana-voice-v3"})
 
 
 # ---------------------------------------------------------------------------
@@ -135,12 +214,22 @@ def _ws_header_kwargs(headers: dict[str, str]) -> dict[str, Any]:
     return {key: headers}
 
 
+def _voices_for_model(model: str) -> frozenset[str]:
+    if model == "timbre-v2.5":
+        return TIMBRE_V25_VOICES
+    if model == "timbre-v2.0":
+        return TIMBRE_V20_VOICES
+    return SUPPORTED_VOICES
+
+
 def _build_request_body(
     text: str,
     voice: str | None,
     model: str,
     audio_config: AudioConfig,
     speaker_embedding: SpeakerEmbedding | None,
+    *,
+    language: str | None = None,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {
         "text": text,
@@ -151,13 +240,28 @@ def _build_request_body(
         body["speaker_embedding"] = speaker_embedding.to_dict()
     elif voice is not None:
         body["voice"] = voice
+    if model == "timbre-v2.5" and language is not None:
+        body["language"] = language
     return body
 
 
-def _validate_voice(voice: str | None) -> None:
-    if voice is not None and voice not in SUPPORTED_VOICES:
+def _validate_voice(
+    voice: str | None,
+    model: str,
+    *,
+    speaker_embedding: SpeakerEmbedding | None = None,
+) -> None:
+    if speaker_embedding is not None:
+        return
+    if model in TIMBRE_MODELS and voice is None:
+        raise ValueError(f"voice is required for model '{model}'")
+    if voice is None:
+        return
+    valid_voices = _voices_for_model(model)
+    if voice not in valid_voices:
         raise ValueError(
-            f"Unsupported voice '{voice}'. Supported voices: {', '.join(sorted(SUPPORTED_VOICES))}"
+            f"Unsupported voice '{voice}' for model '{model}'. "
+            f"Supported voices: {', '.join(sorted(valid_voices))}"
         )
 
 
@@ -165,6 +269,22 @@ def _validate_model(model: str) -> None:
     if model not in SUPPORTED_MODELS:
         raise ValueError(
             f"Unsupported model '{model}'. Choose from: {', '.join(sorted(SUPPORTED_MODELS))}"
+        )
+
+
+def _validate_timbre_options(
+    model: str,
+    *,
+    language: str | None = None,
+) -> None:
+    if model != "timbre-v2.5":
+        if language is not None:
+            raise ValueError("language is only supported for model 'timbre-v2.5'")
+        return
+    if language is not None and language not in SUPPORTED_TTS_LANGUAGES:
+        raise ValueError(
+            f"Unsupported language '{language}'. "
+            f"Choose from: {', '.join(sorted(SUPPORTED_TTS_LANGUAGES))}"
         )
 
 
@@ -241,6 +361,7 @@ class GnaniTTSClient:
         voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
+        language: str | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
         output_file: str | Path | None = None,
@@ -256,7 +377,11 @@ class GnaniTTSClient:
             See https://docs.gnani.ai/api/TTS/tts-sse#available-voices
             Ignored when ``speaker_embedding`` is provided. Defaults to ``"Pranav"``.
         model : str
-            TTS model to use. Defaults to ``"vachana-voice-v3"``.
+            TTS model to use. Defaults to ``"timbre-v2.0"``.
+            Use ``"timbre-v2.5"`` for the expanded voice catalog with
+            ``language`` control.
+        language : str, optional
+            BCP-47 language code for ``timbre-v2.5`` only (e.g. ``"hi-IN"``).
         audio_config : AudioConfig, optional
             Output audio configuration. Defaults to 44100 Hz WAV with linear PCM.
         speaker_embedding : SpeakerEmbedding, optional
@@ -276,10 +401,18 @@ class GnaniTTSClient:
             If the API returns a non-200 response.
         """
         _validate_model(model)
-        _validate_voice(voice)
+        _validate_timbre_options(model, language=language)
+        _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
         cfg = audio_config or AudioConfig()
-        body = _build_request_body(text, voice, model, cfg, speaker_embedding)
+        body = _build_request_body(
+            text,
+            voice,
+            model,
+            cfg,
+            speaker_embedding,
+            language=language,
+        )
 
         response = requests.post(
             f"{self.base_url}{TTS_ENDPOINT}",
@@ -297,9 +430,9 @@ class GnaniTTSClient:
         return audio
 
     @staticmethod
-    def supported_voices() -> list[str]:
-        """Return the list of supported voice IDs."""
-        return sorted(SUPPORTED_VOICES)
+    def supported_voices(model: str = DEFAULT_MODEL) -> list[str]:
+        """Return the list of supported voice IDs for *model*."""
+        return sorted(_voices_for_model(model))
 
 
 # ---------------------------------------------------------------------------
@@ -450,6 +583,7 @@ class GnaniTTSStreamClient:
         voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
+        language: str | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
     ) -> Iterator[bytes]:
@@ -465,7 +599,9 @@ class GnaniTTSStreamClient:
         voice : str, optional
             Pre-defined voice ID. Defaults to ``"Pranav"``.
         model : str
-            TTS model to use. Defaults to ``"vachana-voice-v3"``.
+            TTS model to use. Defaults to ``"timbre-v2.0"``.
+        language : str, optional
+            BCP-47 language code for ``timbre-v2.5`` only.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -484,10 +620,18 @@ class GnaniTTSStreamClient:
             If the server sends an error event.
         """
         _validate_model(model)
-        _validate_voice(voice)
+        _validate_timbre_options(model, language=language)
+        _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
         cfg = audio_config or AudioConfig()
-        body = _build_request_body(text, voice, model, cfg, speaker_embedding)
+        body = _build_request_body(
+            text,
+            voice,
+            model,
+            cfg,
+            speaker_embedding,
+            language=language,
+        )
 
         response = requests.post(
             f"{self.base_url}{TTS_SSE_ENDPOINT}",
@@ -508,6 +652,7 @@ class GnaniTTSStreamClient:
         voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
+        language: str | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
         output_file: str | Path | None = None,
@@ -529,6 +674,7 @@ class GnaniTTSStreamClient:
                 text,
                 voice,
                 model=model,
+                language=language,
                 audio_config=audio_config,
                 speaker_embedding=speaker_embedding,
             )
@@ -547,9 +693,9 @@ class GnaniTTSStreamClient:
         return audio
 
     @staticmethod
-    def supported_voices() -> list[str]:
-        """Return the list of supported voice IDs."""
-        return sorted(SUPPORTED_VOICES)
+    def supported_voices(model: str = DEFAULT_MODEL) -> list[str]:
+        """Return the list of supported voice IDs for *model*."""
+        return sorted(_voices_for_model(model))
 
 
 # ---------------------------------------------------------------------------
@@ -673,6 +819,7 @@ class GnaniTTSRealtimeClient:
         voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
+        language: str | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
     ) -> AsyncIterator[bytes]:
@@ -689,7 +836,9 @@ class GnaniTTSRealtimeClient:
         voice : str, optional
             Pre-defined voice ID. Defaults to ``"Pranav"``.
         model : str
-            TTS model to use. Defaults to ``"vachana-voice-v3"``.
+            TTS model to use. Defaults to ``"timbre-v2.0"``.
+        language : str, optional
+            BCP-47 language code for ``timbre-v2.5`` only.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -706,17 +855,18 @@ class GnaniTTSRealtimeClient:
             If the WebSocket connection cannot be established.
         """
         _validate_model(model)
-        _validate_voice(voice)
+        _validate_timbre_options(model, language=language)
+        _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
         cfg = audio_config or AudioConfig()
-        body: dict[str, Any] = {
-            "text": text,
-            "voice": voice,
-            "model": model,
-            "audio_config": cfg.to_dict(),
-        }
-        if speaker_embedding is not None:
-            body["speaker_embedding"] = speaker_embedding.to_dict()
+        body = _build_request_body(
+            text,
+            voice,
+            model,
+            cfg,
+            speaker_embedding,
+            language=language,
+        )
 
         try:
             ws = await websockets.connect(
@@ -772,6 +922,7 @@ class GnaniTTSRealtimeClient:
         voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
+        language: str | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
     ) -> AsyncIterator[TTSStreamEvent]:
@@ -789,7 +940,9 @@ class GnaniTTSRealtimeClient:
         voice : str, optional
             Pre-defined voice ID. Defaults to ``"Pranav"``.
         model : str
-            TTS model to use. Defaults to ``"vachana-voice-v3"``.
+            TTS model to use. Defaults to ``"timbre-v2.0"``.
+        language : str, optional
+            BCP-47 language code for ``timbre-v2.5`` only.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -802,17 +955,18 @@ class GnaniTTSRealtimeClient:
             or :class:`TTSCompletedEvent`.
         """
         _validate_model(model)
-        _validate_voice(voice)
+        _validate_timbre_options(model, language=language)
+        _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
         cfg = audio_config or AudioConfig()
-        body: dict[str, Any] = {
-            "text": text,
-            "voice": voice,
-            "model": model,
-            "audio_config": cfg.to_dict(),
-        }
-        if speaker_embedding is not None:
-            body["speaker_embedding"] = speaker_embedding.to_dict()
+        body = _build_request_body(
+            text,
+            voice,
+            model,
+            cfg,
+            speaker_embedding,
+            language=language,
+        )
 
         try:
             ws = await websockets.connect(
@@ -894,6 +1048,7 @@ class GnaniTTSRealtimeClient:
         voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
+        language: str | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
         output_file: str | Path | None = None,
@@ -920,6 +1075,7 @@ class GnaniTTSRealtimeClient:
             text,
             voice,
             model=model,
+            language=language,
             audio_config=audio_config,
             speaker_embedding=speaker_embedding,
         ):
@@ -945,6 +1101,6 @@ class GnaniTTSRealtimeClient:
         pass
 
     @staticmethod
-    def supported_voices() -> list[str]:
-        """Return the list of supported voice IDs."""
-        return sorted(SUPPORTED_VOICES)
+    def supported_voices(model: str = DEFAULT_MODEL) -> list[str]:
+        """Return the list of supported voice IDs for *model*."""
+        return sorted(_voices_for_model(model))

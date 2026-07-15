@@ -3,7 +3,7 @@
 
 Official Python client by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
 
-> **[Gnani.ai](https://gnani.ai)** is a production-ready speech AI platform with high-accuracy STT and low-latency TTS for 10+ Indian languages, with 6 voices.
+> **[Gnani.ai](https://gnani.ai)** is a production-ready speech AI platform with high-accuracy STT and low-latency TTS for 10+ Indian languages, with Timbre voices across REST, SSE, and WebSocket APIs.
 
 ## Installation
 
@@ -60,10 +60,22 @@ asyncio.run(main())
 from gnani.tts import GnaniTTSClient, AudioConfig
 
 client = GnaniTTSClient(api_key="your-api-key")
+
+# timbre-v2.0 (default model)
 audio = client.synthesize(
     "नमस्ते, आप कैसे हैं?",
     voice="Pranav",
+    model="timbre-v2.0",
     audio_config=AudioConfig(sample_rate=44100, encoding="linear_pcm", container="wav"),
+)
+
+# timbre-v2.5 — language control
+audio = client.synthesize(
+    "नमस्ते, यह एक परीक्षण है।",
+    voice="Nalini",
+    model="timbre-v2.5",
+    language="hi-IN",
+    audio_config=AudioConfig(container="mp3", sample_rate=22050, bitrate="128k"),
 )
 
 with open("tts_output.wav", "wb") as f:
@@ -76,7 +88,12 @@ with open("tts_output.wav", "wb") as f:
 from gnani.tts import GnaniTTSStreamClient
 
 client = GnaniTTSStreamClient(api_key="your-api-key")
-audio = client.synthesize("Hello from Gnani TTS", voice="Pranav", output_file="tts_sse.wav")
+audio = client.synthesize(
+    "Hello from Gnani TTS",
+    voice="Pranav",
+    model="timbre-v2.0",
+    output_file="tts_sse.wav",
+)
 ```
 
 ### TTS Realtime WebSocket (lowest latency)
@@ -88,7 +105,10 @@ from gnani.tts import GnaniTTSRealtimeClient
 async def main():
     async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
         audio = await client.synthesize_and_collect(
-            "Hello from Gnani TTS", voice="Pranav", output_file="tts_realtime.wav",
+            "Hello from Gnani TTS",
+            voice="Pranav",
+            model="timbre-v2.0",
+            output_file="tts_realtime.wav",
         )
 
 asyncio.run(main())
@@ -147,9 +167,18 @@ STT uses BCP-47 locale codes (e.g. `hi-IN`). For the full list of supported lang
 
 ---
 
-### TTS Voices
+### TTS Voices & Models
 
-See the [official voice list](https://docs.gnani.ai/api/TTS/tts-sse#available-voices) for the latest supported voices.
+TTS uses the **Timbre** engine. Two model IDs are supported:
+
+| Model | Voices | `language` |
+|-------|--------|------------|
+| `timbre-v2.0` (default) | 4 legacy voices | Not supported |
+| `timbre-v2.5` | 42 voices | Supported |
+
+> **Migration:** The former model name `vachana-voice-v3` has been renamed to **`timbre-v2.0`**. Update any `model="vachana-voice-v3"` calls to `model="timbre-v2.0"` (or omit `model` to use the default).
+
+#### timbre-v2.0 voices
 
 | Voice   | Gender | Description              |
 |---------|--------|--------------------------|
@@ -157,6 +186,29 @@ See the [official voice list](https://docs.gnani.ai/api/TTS/tts-sse#available-vo
 | Kaveri  | Female | Confident, Bright        |
 | Shubhra | Female | Gentle, Expressive       |
 | Deepak  | Male   | Grounded, Conversational |
+
+#### timbre-v2.5 voices
+
+42 Timbre voices across Hindi, English, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali, Gujarati, Punjabi, and Hinglish. Examples: `Nalini`, `Kaveri`, `Asmita`, `Suhana`, `Poorvi`.
+
+List voices programmatically:
+
+```python
+from gnani.tts import GnaniTTSClient
+
+print(GnaniTTSClient.supported_voices())                    # timbre-v2.0 (default)
+print(GnaniTTSClient.supported_voices(model="timbre-v2.5")) # 42 voices
+```
+
+#### timbre-v2.5 optional controls
+
+Only **`timbre-v2.5`** accepts the `language` parameter:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `language` | `str` | BCP-47 code: `auto`, `hi-IN`, `en-IN`, `ta-IN`, `te-IN`, `kn-IN`, `ml-IN`, `mr-IN`, `bn-IN`, `gu-IN`, `pa-IN` |
+
+`voice` is required for all Timbre models unless `speaker_embedding` is provided.
 
 ### TTS Languages (Text-to-Speech)
 
@@ -331,13 +383,22 @@ async for event in stream:
 
 ## Text-to-Speech Usage
 
+### TTS Models
+
+```python
+from gnani.tts import DEFAULT_MODEL, SUPPORTED_MODELS
+
+print(DEFAULT_MODEL)              # timbre-v2.0
+print(sorted(SUPPORTED_MODELS))   # timbre-v2.0, timbre-v2.5
+```
+
 ### TTS REST
 
 ```python
 from gnani.tts import GnaniTTSClient
 
 client = GnaniTTSClient(api_key="your-api-key")
-audio = client.synthesize("यह एक टेस्ट है", voice="Pranav")
+audio = client.synthesize("यह एक टेस्ट है", voice="Pranav", model="timbre-v2.0")
 with open("tts_rest.wav", "wb") as f:
     f.write(audio)
 ```
@@ -354,7 +415,8 @@ client = GnaniTTSStreamClient(api_key="your-api-key")
 # synthesize() collects all SSE chunks and returns a valid WAV file
 audio = client.synthesize(
     "Streaming TTS response",
-    voice="Raju",
+    voice="Pranav",
+    model="timbre-v2.0",
     audio_config=AudioConfig(sample_rate=16000, encoding="linear_pcm", container="wav"),
     output_file="tts_sse.wav",
 )
@@ -363,7 +425,7 @@ audio = client.synthesize(
 For raw PCM streaming (e.g. real-time playback), use `synthesize_stream()`:
 
 ```python
-for pcm_chunk in client.synthesize_stream("Hello!", voice="Pranav"):
+for pcm_chunk in client.synthesize_stream("Hello!", voice="Pranav", model="timbre-v2.0"):
     play_audio(pcm_chunk)  # raw PCM, no WAV header
 ```
 
@@ -381,6 +443,7 @@ async def main():
         audio = await client.synthesize_and_collect(
             "Realtime TTS response",
             voice="Kaveri",
+            model="timbre-v2.0",
             audio_config=AudioConfig(sample_rate=16000, encoding="linear_pcm", container="wav"),
             output_file="tts_realtime.wav",
         )
@@ -392,21 +455,40 @@ For raw PCM streaming (e.g. real-time playback):
 
 ```python
 async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
-    async for pcm_chunk in client.synthesize("Hello!", voice="Pranav"):
+    async for pcm_chunk in client.synthesize("Hello!", voice="Pranav", model="timbre-v2.0"):
         play_audio(pcm_chunk)  # raw PCM, no WAV header
 ```
 
-### TTS Voices
-
-6 voices are available. List them programmatically:
+### TTS timbre-v2.5 (expanded catalog)
 
 ```python
-from gnani.tts import GnaniTTSClient
+from gnani.tts import GnaniTTSClient, AudioConfig
 
-print(GnaniTTSClient.supported_voices())
+client = GnaniTTSClient(api_key="your-api-key")
+audio = client.synthesize(
+    "Hello, this is a Timbre test.",
+    voice="Kaveri",
+    model="timbre-v2.5",
+    language="en-IN",
+    audio_config=AudioConfig(container="mp3", sample_rate=22050, bitrate="128k"),
+)
 ```
 
-Available voices: `Pranav`, `Kaveri`, `Shubhra`, `Deepak`. See the [official voice list](https://docs.gnani.ai/api/TTS/tts-sse#available-voices).
+The same `model` and `language` parameters work on `GnaniTTSStreamClient` (SSE) and `GnaniTTSRealtimeClient` (WebSocket) when using `timbre-v2.5`.
+
+### TTS Voices
+
+List voices for a specific model:
+
+```python
+from gnani.tts import GnaniTTSClient, TIMBRE_V25_VOICES
+
+print(GnaniTTSClient.supported_voices())                    # 4 voices (timbre-v2.0)
+print(GnaniTTSClient.supported_voices(model="timbre-v2.5")) # 42 voices
+print(len(TIMBRE_V25_VOICES))                               # 42
+```
+
+Legacy voices (`Pranav`, `Kaveri`, `Shubhra`, `Deepak`) are valid for `timbre-v2.0` only.
 
 ## Audio Requirements
 
