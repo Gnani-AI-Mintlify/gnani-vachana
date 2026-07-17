@@ -125,6 +125,10 @@ SUPPORTED_ENCODINGS = frozenset({"linear_pcm", "oggopus"})
 SUPPORTED_CONTAINERS = frozenset({"raw", "mp3", "wav", "mulaw", "ogg"})
 SUPPORTED_BITRATES = frozenset({"96k", "128k", "192k"})
 
+DEFAULT_SPEED = 1.0
+MIN_SPEED = 0.85
+MAX_SPEED = 1.15
+
 
 # ---------------------------------------------------------------------------
 # Request / config dataclasses
@@ -230,6 +234,7 @@ def _build_request_body(
     speaker_embedding: SpeakerEmbedding | None,
     *,
     language: str | None = None,
+    speed: float | None = None,
 ) -> dict[str, Any]:
     body: dict[str, Any] = {
         "text": text,
@@ -240,8 +245,10 @@ def _build_request_body(
         body["speaker_embedding"] = speaker_embedding.to_dict()
     elif voice is not None:
         body["voice"] = voice
-    if model == "timbre-v2.5" and language is not None:
-        body["language"] = language
+    if model == "timbre-v2.5":
+        if language is not None:
+            body["language"] = language
+        body["speed"] = speed if speed is not None else DEFAULT_SPEED
     return body
 
 
@@ -276,15 +283,22 @@ def _validate_timbre_options(
     model: str,
     *,
     language: str | None = None,
+    speed: float | None = None,
 ) -> None:
     if model != "timbre-v2.5":
         if language is not None:
             raise ValueError("language is only supported for model 'timbre-v2.5'")
+        if speed is not None:
+            raise ValueError("speed is only supported for model 'timbre-v2.5'")
         return
     if language is not None and language not in SUPPORTED_TTS_LANGUAGES:
         raise ValueError(
             f"Unsupported language '{language}'. "
             f"Choose from: {', '.join(sorted(SUPPORTED_TTS_LANGUAGES))}"
+        )
+    if speed is not None and not MIN_SPEED <= speed <= MAX_SPEED:
+        raise ValueError(
+            f"Unsupported speed '{speed}'. Choose a value between {MIN_SPEED} and {MAX_SPEED}."
         )
 
 
@@ -362,6 +376,7 @@ class GnaniTTSClient:
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,
+        speed: float | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
         output_file: str | Path | None = None,
@@ -382,6 +397,9 @@ class GnaniTTSClient:
             ``language`` control.
         language : str, optional
             BCP-47 language code for ``timbre-v2.5`` only (e.g. ``"hi-IN"``).
+        speed : float, optional
+            Speaking rate for ``timbre-v2.5`` only. Recommended range
+            ``0.85`` to ``1.15``. Defaults to ``1.0`` (normal).
         audio_config : AudioConfig, optional
             Output audio configuration. Defaults to 44100 Hz WAV with linear PCM.
         speaker_embedding : SpeakerEmbedding, optional
@@ -401,7 +419,7 @@ class GnaniTTSClient:
             If the API returns a non-200 response.
         """
         _validate_model(model)
-        _validate_timbre_options(model, language=language)
+        _validate_timbre_options(model, language=language, speed=speed)
         _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
         cfg = audio_config or AudioConfig()
@@ -412,6 +430,7 @@ class GnaniTTSClient:
             cfg,
             speaker_embedding,
             language=language,
+            speed=speed,
         )
 
         response = requests.post(
@@ -584,6 +603,7 @@ class GnaniTTSStreamClient:
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,
+        speed: float | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
     ) -> Iterator[bytes]:
@@ -602,6 +622,9 @@ class GnaniTTSStreamClient:
             TTS model to use. Defaults to ``"timbre-v2.0"``.
         language : str, optional
             BCP-47 language code for ``timbre-v2.5`` only.
+        speed : float, optional
+            Speaking rate for ``timbre-v2.5`` only. Recommended range
+            ``0.85`` to ``1.15``. Defaults to ``1.0`` (normal).
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -620,7 +643,7 @@ class GnaniTTSStreamClient:
             If the server sends an error event.
         """
         _validate_model(model)
-        _validate_timbre_options(model, language=language)
+        _validate_timbre_options(model, language=language, speed=speed)
         _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
         cfg = audio_config or AudioConfig()
@@ -631,6 +654,7 @@ class GnaniTTSStreamClient:
             cfg,
             speaker_embedding,
             language=language,
+            speed=speed,
         )
 
         response = requests.post(
@@ -653,6 +677,7 @@ class GnaniTTSStreamClient:
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,
+        speed: float | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
         output_file: str | Path | None = None,
@@ -675,6 +700,7 @@ class GnaniTTSStreamClient:
                 voice,
                 model=model,
                 language=language,
+                speed=speed,
                 audio_config=audio_config,
                 speaker_embedding=speaker_embedding,
             )
@@ -820,6 +846,7 @@ class GnaniTTSRealtimeClient:
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,
+        speed: float | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
     ) -> AsyncIterator[bytes]:
@@ -839,6 +866,9 @@ class GnaniTTSRealtimeClient:
             TTS model to use. Defaults to ``"timbre-v2.0"``.
         language : str, optional
             BCP-47 language code for ``timbre-v2.5`` only.
+        speed : float, optional
+            Speaking rate for ``timbre-v2.5`` only. Recommended range
+            ``0.85`` to ``1.15``. Defaults to ``1.0`` (normal).
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -855,7 +885,7 @@ class GnaniTTSRealtimeClient:
             If the WebSocket connection cannot be established.
         """
         _validate_model(model)
-        _validate_timbre_options(model, language=language)
+        _validate_timbre_options(model, language=language, speed=speed)
         _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
         cfg = audio_config or AudioConfig()
@@ -866,6 +896,7 @@ class GnaniTTSRealtimeClient:
             cfg,
             speaker_embedding,
             language=language,
+            speed=speed,
         )
 
         try:
@@ -923,6 +954,7 @@ class GnaniTTSRealtimeClient:
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,
+        speed: float | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
     ) -> AsyncIterator[TTSStreamEvent]:
@@ -943,6 +975,9 @@ class GnaniTTSRealtimeClient:
             TTS model to use. Defaults to ``"timbre-v2.0"``.
         language : str, optional
             BCP-47 language code for ``timbre-v2.5`` only.
+        speed : float, optional
+            Speaking rate for ``timbre-v2.5`` only. Recommended range
+            ``0.85`` to ``1.15``. Defaults to ``1.0`` (normal).
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -955,7 +990,7 @@ class GnaniTTSRealtimeClient:
             or :class:`TTSCompletedEvent`.
         """
         _validate_model(model)
-        _validate_timbre_options(model, language=language)
+        _validate_timbre_options(model, language=language, speed=speed)
         _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
         cfg = audio_config or AudioConfig()
@@ -966,6 +1001,7 @@ class GnaniTTSRealtimeClient:
             cfg,
             speaker_embedding,
             language=language,
+            speed=speed,
         )
 
         try:
@@ -1049,6 +1085,7 @@ class GnaniTTSRealtimeClient:
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,
+        speed: float | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
         output_file: str | Path | None = None,
@@ -1076,6 +1113,7 @@ class GnaniTTSRealtimeClient:
             voice,
             model=model,
             language=language,
+            speed=speed,
             audio_config=audio_config,
             speaker_embedding=speaker_embedding,
         ):

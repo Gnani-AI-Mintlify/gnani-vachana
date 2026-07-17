@@ -2,6 +2,9 @@
 
 from gnani.tts.client import (
     DEFAULT_MODEL,
+    DEFAULT_SPEED,
+    MAX_SPEED,
+    MIN_SPEED,
     SUPPORTED_BITRATES,
     SUPPORTED_CONTAINERS,
     SUPPORTED_ENCODINGS,
@@ -32,6 +35,9 @@ from gnani.tts.exceptions import (
 
 __all__ = [
     "DEFAULT_MODEL",
+    "DEFAULT_SPEED",
+    "MAX_SPEED",
+    "MIN_SPEED",
     "SUPPORTED_BITRATES",
     "SUPPORTED_CONTAINERS",
     "SUPPORTED_ENCODINGS",
