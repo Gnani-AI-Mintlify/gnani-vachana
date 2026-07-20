@@ -6,7 +6,6 @@ import asyncio
 import contextlib
 import json
 import os
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import TracebackType
@@ -15,6 +14,7 @@ from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Union, cast
 import requests
 import websockets
 
+from gnani.log import logger, resolve_request_id
 from gnani.stt.exceptions import (
     APIError,
     AuthenticationError,
@@ -240,7 +240,7 @@ class GnaniSTTClient:
     def _build_headers(self, request_id: str | None = None) -> dict[str, str]:
         return {
             "X-API-Key-ID": self.api_key,
-            "X-API-Request-ID": request_id or f"req_{uuid.uuid4().hex[:12]}",
+            "X-API-Request-ID": resolve_request_id(request_id),
         }
 
     def transcribe(
@@ -295,7 +295,13 @@ class GnaniSTTClient:
         if format not in ("verbatim", "transcribe"):
             raise ValueError(f"format must be 'verbatim' or 'transcribe', got '{format}'")
 
-        headers = self._build_headers(request_id)
+        resolved_request_id = resolve_request_id(request_id)
+        headers = self._build_headers(resolved_request_id)
+        logger.info(
+            "[STT REST] transcribe start | request_id=%s | language=%s",
+            resolved_request_id,
+            language_code,
+        )
         file_handle: BinaryIO | None = None
         should_close = False
 
@@ -333,8 +339,17 @@ class GnaniSTTClient:
                 file_handle.close()
 
         if response.status_code != 200:
+            logger.error(
+                "[STT REST] transcribe failed | request_id=%s | status=%s",
+                resolved_request_id,
+                response.status_code,
+            )
             raise APIError(response.status_code, response.text)
 
+        logger.info(
+            "[STT REST] transcribe complete | request_id=%s",
+            resolved_request_id,
+        )
         return cast("dict[str, Any]", response.json())
 
     def transcribe_bytes(
@@ -374,7 +389,13 @@ class GnaniSTTClient:
         if format not in ("verbatim", "transcribe"):
             raise ValueError(f"format must be 'verbatim' or 'transcribe', got '{format}'")
 
-        headers = self._build_headers(request_id)
+        resolved_request_id = resolve_request_id(request_id)
+        headers = self._build_headers(resolved_request_id)
+        logger.info(
+            "[STT REST] transcribe_bytes start | request_id=%s | language=%s",
+            resolved_request_id,
+            language_code,
+        )
         url = f"{self.base_url}{STT_ENDPOINT}"
         files = {"audio_file": (filename, audio_bytes)}
         data: dict[str, Any] = {"language_code": language_code, "format": format}
@@ -391,8 +412,17 @@ class GnaniSTTClient:
         )
 
         if response.status_code != 200:
+            logger.error(
+                "[STT REST] transcribe_bytes failed | request_id=%s | status=%s",
+                resolved_request_id,
+                response.status_code,
+            )
             raise APIError(response.status_code, response.text)
 
+        logger.info(
+            "[STT REST] transcribe_bytes complete | request_id=%s",
+            resolved_request_id,
+        )
         return cast("dict[str, Any]", response.json())
 
     @staticmethod
@@ -543,6 +573,7 @@ class GnaniSTTStreamClient:
         self._receive_task: asyncio.Task | None = None
         self._events: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
         self._transcripts: list[StreamTranscriptEvent] = []
+        self._request_id: str | None = None
 
     @property
     def is_connected(self) -> bool:
@@ -576,8 +607,13 @@ class GnaniSTTStreamClient:
 
     # -- Connection lifecycle ------------------------------------------------
 
-    async def connect(self) -> StreamConnectedEvent:
+    async def connect(self, request_id: str | None = None) -> StreamConnectedEvent:
         """Open the WebSocket connection and wait for the ``connected`` event.
+
+        Parameters
+        ----------
+        request_id : str, optional
+            Custom request ID for tracking. Auto-generated if omitted.
 
         Returns
         -------
@@ -589,10 +625,17 @@ class GnaniSTTStreamClient:
         StreamConnectionError
             If the connection cannot be established.
         """
+        self._request_id = resolve_request_id(request_id)
+        logger.info(
+            "[STT WS] connect start | request_id=%s | language=%s",
+            self._request_id,
+            self.language_code,
+        )
         headers: dict[str, str] = {
             "x-api-key-id": self.api_key,
             "lang_code": self.language_code,
             "x-sample-rate": str(self.sample_rate),
+            "x-api-request-id": self._request_id,
         }
         if self.format != "verbatim":
             headers["x-format"] = self.format
@@ -608,6 +651,11 @@ class GnaniSTTStreamClient:
                 close_timeout=10,
             )
         except Exception as exc:
+            logger.error(
+                "[STT WS] connect failed | request_id=%s | error=%s",
+                self._request_id,
+                exc,
+            )
             raise StreamConnectionError(f"Failed to connect to {self._ws_url}: {exc}") from exc
 
         self._transcripts.clear()
@@ -618,11 +666,24 @@ class GnaniSTTStreamClient:
         first = await self._events.get()
         if isinstance(first, StreamConnectedEvent):
             self._connected_event = first
+            logger.info(
+                "[STT WS] connect complete | request_id=%s",
+                self._request_id,
+            )
             return first
         elif isinstance(first, StreamErrorEvent):
+            logger.error(
+                "[STT WS] connect failed | request_id=%s | error=%s",
+                self._request_id,
+                first.message,
+            )
             await self._close_ws()
             raise StreamConnectionError(f"Server error on connect: {first.message}")
         else:
+            logger.error(
+                "[STT WS] connect failed | request_id=%s | error=unexpected first message",
+                self._request_id,
+            )
             await self._close_ws()
             raise StreamConnectionError("Unexpected first message from server")
 
@@ -804,6 +865,10 @@ class GnaniSTTStreamClient:
                     event = _parse_stream_message(raw_msg)
                     if isinstance(event, StreamTranscriptEvent):
                         self._transcripts.append(event)
+                        logger.debug(
+                            "[STT WS] transcript received | request_id=%s",
+                            self._request_id,
+                        )
                     await self._events.put(event)
         except websockets.ConnectionClosed:
             pass

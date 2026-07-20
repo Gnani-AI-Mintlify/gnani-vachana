@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Union, cast
 import requests
 import websockets
 
+from gnani.log import logger, resolve_request_id
 from gnani.tts.exceptions import (
     APIError,
     AuthenticationError,
@@ -121,9 +122,10 @@ SUPPORTED_TTS_LANGUAGES = frozenset(
     }
 )
 
-SUPPORTED_ENCODINGS = frozenset({"linear_pcm", "oggopus"})
-SUPPORTED_CONTAINERS = frozenset({"raw", "mp3", "wav", "mulaw", "ogg"})
-SUPPORTED_BITRATES = frozenset({"96k", "128k", "192k"})
+SUPPORTED_ENCODINGS = frozenset({"linear_pcm", "oggopus", "pcm_mulaw", "pcm_alaw"})
+SUPPORTED_CONTAINERS = frozenset({"raw", "mp3", "wav", "ogg", "mulaw", "alaw"})
+SUPPORTED_BITRATES = frozenset({"32k", "64k", "96k", "128k", "192k"})
+SUPPORTED_SAMPLE_RATES = (8000, 16000, 22050, 24000, 44100, 48000)
 
 DEFAULT_SPEED = 1.0
 MIN_SPEED = 0.85
@@ -142,9 +144,10 @@ class AudioConfig:
     Attributes
     ----------
     sample_rate : int
-        Sample rate in Hz (8000–44100). Defaults to ``44100``.
+        Sample rate in Hz (8000–48000). Defaults to ``48000``.
     encoding : str
-        Audio encoding. One of ``"linear_pcm"`` or ``"oggopus"``.
+        Audio encoding. One of ``"linear_pcm"``, ``"oggopus"``,
+        ``"pcm_mulaw"``, or ``"pcm_alaw"``.
         Defaults to ``"linear_pcm"``.
     num_channels : int
         Number of audio channels (1–8). Defaults to ``1`` (mono).
@@ -152,13 +155,17 @@ class AudioConfig:
         Sample width in bytes (1–4). Defaults to ``2`` (16-bit).
     container : str
         Audio container. One of ``"raw"``, ``"mp3"``, ``"wav"``,
-        ``"mulaw"``, or ``"ogg"``. Defaults to ``"wav"``.
+        ``"mulaw"``, or ``"alaw"``. Defaults to ``"wav"``.
+
+        For telephony A-law output, use ``container="alaw"`` with
+        ``sample_rate=8000``.  For Opus, use ``container="raw"`` with
+        ``encoding="oggopus"``.
     bitrate : str, optional
-        MP3 bitrate — ``"96k"``, ``"128k"``, or ``"192k"``.
-        Only relevant when ``container="mp3"``.
+        MP3 bitrate — ``"32k"``, ``"64k"``, ``"96k"``, ``"128k"``, or
+        ``"192k"``. Only relevant when ``container="mp3"``.
     """
 
-    sample_rate: int = 44100
+    sample_rate: int = 48000
     encoding: str = "linear_pcm"
     num_channels: int = 1
     sample_width: int = 2
@@ -279,6 +286,29 @@ def _validate_model(model: str) -> None:
         )
 
 
+def _validate_audio_config(cfg: AudioConfig) -> None:
+    """Validate audio configuration values before making an API call."""
+    if cfg.encoding not in SUPPORTED_ENCODINGS:
+        raise ValueError(
+            f"Unsupported encoding '{cfg.encoding}'. "
+            f"Choose from: {', '.join(sorted(SUPPORTED_ENCODINGS))}"
+        )
+    if cfg.container not in SUPPORTED_CONTAINERS:
+        raise ValueError(
+            f"Unsupported container '{cfg.container}'. "
+            f"Choose from: {', '.join(sorted(SUPPORTED_CONTAINERS))}"
+        )
+    if cfg.sample_rate not in SUPPORTED_SAMPLE_RATES:
+        raise ValueError(
+            f"Unsupported sample_rate {cfg.sample_rate}. Choose from: {SUPPORTED_SAMPLE_RATES}"
+        )
+    if cfg.bitrate is not None and cfg.bitrate not in SUPPORTED_BITRATES:
+        raise ValueError(
+            f"Unsupported bitrate '{cfg.bitrate}'. "
+            f"Choose from: {', '.join(sorted(SUPPORTED_BITRATES))}"
+        )
+
+
 def _validate_timbre_options(
     model: str,
     *,
@@ -363,10 +393,11 @@ class GnaniTTSClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
-    def _build_headers(self) -> dict[str, str]:
+    def _build_headers(self, request_id: str | None = None) -> dict[str, str]:
         return {
             "X-API-Key-ID": self.api_key,
             "Content-Type": "application/json",
+            "X-API-Request-ID": resolve_request_id(request_id),
         }
 
     def synthesize(
@@ -380,6 +411,7 @@ class GnaniTTSClient:
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
         output_file: str | Path | None = None,
+        request_id: str | None = None,
     ) -> bytes:
         """Synthesise speech and return the full audio as bytes.
 
@@ -407,6 +439,8 @@ class GnaniTTSClient:
         output_file : str or Path, optional
             If provided, the synthesised audio is written to this file path.
             Parent directories are created automatically.
+        request_id : str, optional
+            Custom request ID for tracking. Auto-generated if omitted.
 
         Returns
         -------
@@ -422,7 +456,16 @@ class GnaniTTSClient:
         _validate_timbre_options(model, language=language, speed=speed)
         _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
+        resolved_request_id = resolve_request_id(request_id)
+        logger.info(
+            "[TTS REST] synthesize start | request_id=%s | model=%s | voice=%s",
+            resolved_request_id,
+            model,
+            voice,
+        )
+
         cfg = audio_config or AudioConfig()
+        _validate_audio_config(cfg)
         body = _build_request_body(
             text,
             voice,
@@ -435,17 +478,26 @@ class GnaniTTSClient:
 
         response = requests.post(
             f"{self.base_url}{TTS_ENDPOINT}",
-            headers=self._build_headers(),
+            headers=self._build_headers(resolved_request_id),
             json=body,
             timeout=self.timeout,
         )
 
         if response.status_code != 200:
+            logger.error(
+                "[TTS REST] synthesize failed | request_id=%s | status=%s",
+                resolved_request_id,
+                response.status_code,
+            )
             raise APIError(response.status_code, response.text)
 
         audio = cast("bytes", response.content)
         if output_file is not None:
             _save_audio(audio, output_file)
+        logger.info(
+            "[TTS REST] synthesize complete | request_id=%s",
+            resolved_request_id,
+        )
         return audio
 
     @staticmethod
@@ -590,10 +642,11 @@ class GnaniTTSStreamClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
-    def _build_headers(self) -> dict[str, str]:
+    def _build_headers(self, request_id: str | None = None) -> dict[str, str]:
         return {
             "X-API-Key-ID": self.api_key,
             "Content-Type": "application/json",
+            "X-API-Request-ID": resolve_request_id(request_id),
         }
 
     def synthesize_stream(
@@ -606,6 +659,7 @@ class GnaniTTSStreamClient:
         speed: float | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
+        request_id: str | None = None,
     ) -> Iterator[bytes]:
         """Synthesise speech and yield raw PCM audio chunks.
 
@@ -629,6 +683,8 @@ class GnaniTTSStreamClient:
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
             Voice cloning embedding. When provided, ``voice`` is ignored.
+        request_id : str, optional
+            Custom request ID for tracking. Auto-generated if omitted.
 
         Yields
         ------
@@ -646,7 +702,16 @@ class GnaniTTSStreamClient:
         _validate_timbre_options(model, language=language, speed=speed)
         _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
+        resolved_request_id = resolve_request_id(request_id)
+        logger.info(
+            "[TTS SSE] synthesize_stream start | request_id=%s | model=%s | voice=%s",
+            resolved_request_id,
+            model,
+            voice,
+        )
+
         cfg = audio_config or AudioConfig()
+        _validate_audio_config(cfg)
         body = _build_request_body(
             text,
             voice,
@@ -659,16 +724,32 @@ class GnaniTTSStreamClient:
 
         response = requests.post(
             f"{self.base_url}{TTS_SSE_ENDPOINT}",
-            headers=self._build_headers(),
+            headers=self._build_headers(resolved_request_id),
             json=body,
             stream=True,
             timeout=self.timeout,
         )
 
         if response.status_code != 200:
+            logger.error(
+                "[TTS SSE] synthesize_stream failed | request_id=%s | status=%s",
+                resolved_request_id,
+                response.status_code,
+            )
             raise APIError(response.status_code, response.text)
 
-        yield from _parse_sse_lines(response)
+        try:
+            yield from _parse_sse_lines(response)
+            logger.info(
+                "[TTS SSE] synthesize_stream complete | request_id=%s",
+                resolved_request_id,
+            )
+        except StreamError:
+            logger.error(
+                "[TTS SSE] synthesize_stream failed | request_id=%s",
+                resolved_request_id,
+            )
+            raise
 
     def synthesize(
         self,
@@ -681,20 +762,30 @@ class GnaniTTSStreamClient:
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
         output_file: str | Path | None = None,
+        request_id: str | None = None,
     ) -> bytes:
-        """Synthesise speech and return the complete audio as a valid WAV.
+        """Synthesise speech and return the complete audio.
 
-        Convenience wrapper around :meth:`synthesize_stream` that collects
-        all raw PCM chunks and wraps them in a single WAV header.
+        For ``encoding="linear_pcm"`` the result is a valid WAV file
+        (raw PCM wrapped with a RIFF header). For other encodings
+        (e.g. ``"oggopus"``) the raw bytes are returned as-is without
+        a WAV header.
 
         Parameters
         ----------
         output_file : str or Path, optional
             If provided, the complete audio is written to this file.
             Parent directories are created automatically.
+        request_id : str, optional
+            Custom request ID for tracking. Auto-generated if omitted.
         """
+        resolved_request_id = resolve_request_id(request_id)
+        logger.info(
+            "[TTS SSE] synthesize start | request_id=%s",
+            resolved_request_id,
+        )
         cfg = audio_config or AudioConfig()
-        pcm = b"".join(
+        collected = b"".join(
             self.synthesize_stream(
                 text,
                 voice,
@@ -703,19 +794,27 @@ class GnaniTTSStreamClient:
                 speed=speed,
                 audio_config=audio_config,
                 speaker_embedding=speaker_embedding,
+                request_id=resolved_request_id,
             )
         )
-        audio = (
-            _build_wav_header(
-                len(pcm),
-                cfg.sample_rate,
-                cfg.num_channels,
-                cfg.sample_width,
+        if cfg.encoding == "linear_pcm" and cfg.container == "wav":
+            audio = (
+                _build_wav_header(
+                    len(collected),
+                    cfg.sample_rate,
+                    cfg.num_channels,
+                    cfg.sample_width,
+                )
+                + collected
             )
-            + pcm
-        )
+        else:
+            audio = collected
         if output_file is not None:
             _save_audio(audio, output_file)
+        logger.info(
+            "[TTS SSE] synthesize complete | request_id=%s",
+            resolved_request_id,
+        )
         return audio
 
     @staticmethod
@@ -833,11 +932,43 @@ class GnaniTTSRealtimeClient:
         host = base_url.replace("https://", "").replace("http://", "").rstrip("/")
         self._ws_url = f"{ws_scheme}://{host}{TTS_WS_ENDPOINT}"
 
-    def _build_headers(self) -> dict[str, str]:
+    def _build_headers(self, request_id: str | None = None) -> dict[str, str]:
         return {
             "Content-Type": "application/json",
             "X-API-Key-ID": self.api_key,
+            "X-API-Request-ID": resolve_request_id(request_id),
         }
+
+    def _prepare_ws_request(
+        self,
+        text: str,
+        voice: str | None,
+        *,
+        model: str,
+        language: str | None,
+        speed: float | None,
+        audio_config: AudioConfig | None,
+        speaker_embedding: SpeakerEmbedding | None,
+        request_id: str | None,
+    ) -> tuple[str, dict[str, Any]]:
+        _validate_model(model)
+        _validate_timbre_options(model, language=language, speed=speed)
+        _validate_voice(voice, model, speaker_embedding=speaker_embedding)
+
+        resolved_request_id = resolve_request_id(request_id)
+        cfg = audio_config or AudioConfig()
+        _validate_audio_config(cfg)
+        body = _build_request_body(
+            text,
+            voice,
+            model,
+            cfg,
+            speaker_embedding,
+            language=language,
+            speed=speed,
+        )
+        body["request_id"] = resolved_request_id
+        return resolved_request_id, body
 
     async def synthesize(
         self,
@@ -849,6 +980,7 @@ class GnaniTTSRealtimeClient:
         speed: float | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
+        request_id: str | None = None,
     ) -> AsyncIterator[bytes]:
         """Stream audio chunks for the given text via WebSocket.
 
@@ -873,6 +1005,8 @@ class GnaniTTSRealtimeClient:
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
             Voice cloning embedding (included alongside ``voice``).
+        request_id : str, optional
+            Custom request ID for tracking. Auto-generated if omitted.
 
         Yields
         ------
@@ -884,36 +1018,48 @@ class GnaniTTSRealtimeClient:
         StreamConnectionError
             If the WebSocket connection cannot be established.
         """
-        _validate_model(model)
-        _validate_timbre_options(model, language=language, speed=speed)
-        _validate_voice(voice, model, speaker_embedding=speaker_embedding)
-
-        cfg = audio_config or AudioConfig()
-        body = _build_request_body(
+        resolved_request_id, body = self._prepare_ws_request(
             text,
             voice,
-            model,
-            cfg,
-            speaker_embedding,
+            model=model,
             language=language,
             speed=speed,
+            audio_config=audio_config,
+            speaker_embedding=speaker_embedding,
+            request_id=request_id,
+        )
+        logger.info(
+            "[TTS WS] synthesize start | request_id=%s | model=%s | voice=%s",
+            resolved_request_id,
+            model,
+            voice,
         )
 
         try:
             ws = await websockets.connect(
                 self._ws_url,
-                **_ws_header_kwargs(self._build_headers()),
+                **_ws_header_kwargs(self._build_headers(resolved_request_id)),
+                open_timeout=30,
                 ping_interval=20,
                 ping_timeout=20,
                 close_timeout=10,
             )
         except Exception as exc:
+            logger.error(
+                "[TTS WS] synthesize failed | request_id=%s | error=%s",
+                resolved_request_id,
+                exc,
+            )
             raise StreamConnectionError(f"Failed to connect to {self._ws_url}: {exc}") from exc
 
         try:
             await ws.send(json.dumps(body))
             async for message in ws:
                 if isinstance(message, bytes):
+                    logger.debug(
+                        "[TTS WS] audio chunk received | request_id=%s",
+                        resolved_request_id,
+                    )
                     yield _strip_wav_header(message)
                     continue
 
@@ -928,6 +1074,10 @@ class GnaniTTSRealtimeClient:
                     data = payload.get("data", {})
                     audio_b64 = data.get("audio", "")
                     if audio_b64:
+                        logger.debug(
+                            "[TTS WS] audio chunk received | request_id=%s",
+                            resolved_request_id,
+                        )
                         yield _strip_wav_header(base64.b64decode(audio_b64))
 
                 elif msg_type == "complete":
@@ -935,10 +1085,23 @@ class GnaniTTSRealtimeClient:
                     if data is not None:
                         audio_b64 = data.get("audio", "")
                         if audio_b64:
+                            logger.debug(
+                                "[TTS WS] audio chunk received | request_id=%s",
+                                resolved_request_id,
+                            )
                             yield _strip_wav_header(base64.b64decode(audio_b64))
+                    logger.info(
+                        "[TTS WS] synthesize complete | request_id=%s",
+                        resolved_request_id,
+                    )
                     return
 
                 elif msg_type == "error":
+                    logger.error(
+                        "[TTS WS] synthesize failed | request_id=%s | error=%s",
+                        resolved_request_id,
+                        payload.get("message", json.dumps(payload)),
+                    )
                     raise StreamError(payload.get("message", json.dumps(payload)))
 
         except websockets.ConnectionClosed:
@@ -957,6 +1120,7 @@ class GnaniTTSRealtimeClient:
         speed: float | None = None,
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
+        request_id: str | None = None,
     ) -> AsyncIterator[TTSStreamEvent]:
         """Stream typed events for the given text via WebSocket.
 
@@ -982,6 +1146,8 @@ class GnaniTTSRealtimeClient:
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
             Voice cloning embedding (included alongside ``voice``).
+        request_id : str, optional
+            Custom request ID for tracking. Auto-generated if omitted.
 
         Yields
         ------
@@ -989,30 +1155,38 @@ class GnaniTTSRealtimeClient:
             One of :class:`TTSStartEvent`, :class:`TTSAudioChunkEvent`,
             or :class:`TTSCompletedEvent`.
         """
-        _validate_model(model)
-        _validate_timbre_options(model, language=language, speed=speed)
-        _validate_voice(voice, model, speaker_embedding=speaker_embedding)
-
-        cfg = audio_config or AudioConfig()
-        body = _build_request_body(
+        resolved_request_id, body = self._prepare_ws_request(
             text,
             voice,
-            model,
-            cfg,
-            speaker_embedding,
+            model=model,
             language=language,
             speed=speed,
+            audio_config=audio_config,
+            speaker_embedding=speaker_embedding,
+            request_id=request_id,
+        )
+        logger.info(
+            "[TTS WS] synthesize_events start | request_id=%s | model=%s | voice=%s",
+            resolved_request_id,
+            model,
+            voice,
         )
 
         try:
             ws = await websockets.connect(
                 self._ws_url,
-                **_ws_header_kwargs(self._build_headers()),
+                **_ws_header_kwargs(self._build_headers(resolved_request_id)),
+                open_timeout=30,
                 ping_interval=20,
                 ping_timeout=20,
                 close_timeout=10,
             )
         except Exception as exc:
+            logger.error(
+                "[TTS WS] synthesize_events failed | request_id=%s | error=%s",
+                resolved_request_id,
+                exc,
+            )
             raise StreamConnectionError(f"Failed to connect to {self._ws_url}: {exc}") from exc
 
         chunk_count = 0
@@ -1021,6 +1195,10 @@ class GnaniTTSRealtimeClient:
             async for message in ws:
                 if isinstance(message, bytes):
                     chunk_count += 1
+                    logger.debug(
+                        "[TTS WS] audio chunk received | request_id=%s",
+                        resolved_request_id,
+                    )
                     yield TTSAudioChunkEvent(
                         data=_strip_wav_header(message),
                         chunk_index=chunk_count,
@@ -1036,8 +1214,13 @@ class GnaniTTSRealtimeClient:
                 msg_type = payload.get("type")
 
                 if msg_type == "start":
+                    event_request_id = payload.get("request_id", resolved_request_id)
+                    logger.debug(
+                        "[TTS WS] start event received | request_id=%s",
+                        event_request_id,
+                    )
                     yield TTSStartEvent(
-                        request_id=payload.get("request_id", ""),
+                        request_id=event_request_id,
                         message=payload.get("message", ""),
                     )
 
@@ -1046,6 +1229,10 @@ class GnaniTTSRealtimeClient:
                     audio_b64 = data.get("audio", "")
                     if audio_b64:
                         chunk_count += 1
+                        logger.debug(
+                            "[TTS WS] audio chunk received | request_id=%s",
+                            resolved_request_id,
+                        )
                         yield TTSAudioChunkEvent(
                             data=_strip_wav_header(base64.b64decode(audio_b64)),
                             chunk_index=data.get("chunk_index", chunk_count),
@@ -1058,18 +1245,32 @@ class GnaniTTSRealtimeClient:
                         audio_b64 = data.get("audio", "")
                         if audio_b64:
                             chunk_count += 1
+                            logger.debug(
+                                "[TTS WS] audio chunk received | request_id=%s",
+                                resolved_request_id,
+                            )
                             yield TTSAudioChunkEvent(
                                 data=_strip_wav_header(base64.b64decode(audio_b64)),
                                 chunk_index=data.get("chunk_index", chunk_count),
                                 is_final=data.get("is_final", True),
                             )
+                    completed_request_id = payload.get("request_id", resolved_request_id)
+                    logger.info(
+                        "[TTS WS] synthesize_events complete | request_id=%s",
+                        completed_request_id,
+                    )
                     yield TTSCompletedEvent(
-                        request_id=payload.get("request_id", ""),
+                        request_id=completed_request_id,
                         total_chunks=chunk_count,
                     )
                     return
 
                 elif msg_type == "error":
+                    logger.error(
+                        "[TTS WS] synthesize_events failed | request_id=%s | error=%s",
+                        resolved_request_id,
+                        payload.get("message", json.dumps(payload)),
+                    )
                     raise StreamError(payload.get("message", json.dumps(payload)))
 
         except websockets.ConnectionClosed:
@@ -1089,22 +1290,26 @@ class GnaniTTSRealtimeClient:
         audio_config: AudioConfig | None = None,
         speaker_embedding: SpeakerEmbedding | None = None,
         output_file: str | Path | None = None,
+        request_id: str | None = None,
     ) -> bytes:
-        """Synthesise speech and return a complete valid WAV file.
+        """Synthesise speech and return the complete audio.
 
-        Convenience wrapper around :meth:`synthesize` that collects raw
-        PCM chunks and wraps them in a single WAV header.
+        For ``encoding="linear_pcm"`` the result is a valid WAV file.
+        For other encodings (e.g. ``"oggopus"``) the raw bytes are
+        returned as-is without a WAV header.
 
         Parameters
         ----------
         output_file : str or Path, optional
             If provided, the complete audio is written to this file.
             Parent directories are created automatically.
+        request_id : str, optional
+            Custom request ID for tracking. Auto-generated if omitted.
 
         Returns
         -------
         bytes
-            The complete synthesised audio as a valid WAV file.
+            The complete synthesised audio.
         """
         cfg = audio_config or AudioConfig()
         chunks: list[bytes] = []
@@ -1116,18 +1321,22 @@ class GnaniTTSRealtimeClient:
             speed=speed,
             audio_config=audio_config,
             speaker_embedding=speaker_embedding,
+            request_id=request_id,
         ):
             chunks.append(chunk)
-        pcm = b"".join(chunks)
-        audio = (
-            _build_wav_header(
-                len(pcm),
-                cfg.sample_rate,
-                cfg.num_channels,
-                cfg.sample_width,
+        collected = b"".join(chunks)
+        if cfg.encoding == "linear_pcm" and cfg.container == "wav":
+            audio = (
+                _build_wav_header(
+                    len(collected),
+                    cfg.sample_rate,
+                    cfg.num_channels,
+                    cfg.sample_width,
+                )
+                + collected
             )
-            + pcm
-        )
+        else:
+            audio = collected
         if output_file is not None:
             _save_audio(audio, output_file)
         return audio

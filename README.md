@@ -66,32 +66,34 @@ audio = client.synthesize(
     "नमस्ते, आप कैसे हैं?",
     voice="Pranav",
     model="timbre-v2.0",
-    audio_config=AudioConfig(sample_rate=44100, encoding="linear_pcm", container="wav"),
+    audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
 )
 
-# timbre-v2.5 — language control
+# timbre-v2.5 — language control + speed
 audio = client.synthesize(
     "नमस्ते, यह एक परीक्षण है।",
     voice="Nalini",
     model="timbre-v2.5",
     language="hi-IN",
-    audio_config=AudioConfig(container="mp3", sample_rate=22050, bitrate="128k"),
+    speed=1.0,
+    audio_config=AudioConfig(container="mp3", sample_rate=48000, bitrate="128k"),
 )
 
-with open("tts_output.wav", "wb") as f:
+with open("tts_output.mp3", "wb") as f:
     f.write(audio)
 ```
 
 ### TTS SSE Streaming (lower latency)
 
 ```python
-from gnani.tts import GnaniTTSStreamClient
+from gnani.tts import GnaniTTSStreamClient, AudioConfig
 
 client = GnaniTTSStreamClient(api_key="your-api-key")
 audio = client.synthesize(
     "Hello from Gnani TTS",
     voice="Pranav",
     model="timbre-v2.0",
+    audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
     output_file="tts_sse.wav",
 )
 ```
@@ -100,7 +102,7 @@ audio = client.synthesize(
 
 ```python
 import asyncio
-from gnani.tts import GnaniTTSRealtimeClient
+from gnani.tts import GnaniTTSRealtimeClient, AudioConfig
 
 async def main():
     async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
@@ -108,6 +110,7 @@ async def main():
             "Hello from Gnani TTS",
             voice="Pranav",
             model="timbre-v2.0",
+            audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
             output_file="tts_realtime.wav",
         )
 
@@ -202,11 +205,12 @@ print(GnaniTTSClient.supported_voices(model="timbre-v2.5")) # 42 voices
 
 #### timbre-v2.5 optional controls
 
-Only **`timbre-v2.5`** accepts the `language` parameter:
+Only **`timbre-v2.5`** accepts the `language` and `speed` parameters:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `language` | `str` | BCP-47 code: `auto`, `hi-IN`, `en-IN`, `ta-IN`, `te-IN`, `kn-IN`, `ml-IN`, `mr-IN`, `bn-IN`, `gu-IN`, `pa-IN` |
+| `speed` | `float` | Speaking rate. Range `0.85`–`1.15`. Defaults to `1.0` (normal speed). |
 
 `voice` is required for all Timbre models unless `speaker_embedding` is provided.
 
@@ -383,6 +387,8 @@ async for event in stream:
 
 ## Text-to-Speech Usage
 
+> Input text is normalized server-side; see the [Text Normalization Guide](https://docs.gnani.ai/api/TTS/tts-input-formating) for symbols, numbers, and abbreviations.
+
 ### TTS Models
 
 ```python
@@ -398,6 +404,7 @@ print(sorted(SUPPORTED_MODELS))   # timbre-v2.0, timbre-v2.5
 from gnani.tts import GnaniTTSClient
 
 client = GnaniTTSClient(api_key="your-api-key")
+# Default audio_config uses sample_rate=48000
 audio = client.synthesize("यह एक टेस्ट है", voice="Pranav", model="timbre-v2.0")
 with open("tts_rest.wav", "wb") as f:
     f.write(audio)
@@ -412,21 +419,21 @@ from gnani.tts import GnaniTTSStreamClient, AudioConfig
 
 client = GnaniTTSStreamClient(api_key="your-api-key")
 
-# synthesize() collects all SSE chunks and returns a valid WAV file
+# synthesize() collects all chunks and returns audio matching audio_config
 audio = client.synthesize(
     "Streaming TTS response",
     voice="Pranav",
     model="timbre-v2.0",
-    audio_config=AudioConfig(sample_rate=16000, encoding="linear_pcm", container="wav"),
+    audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
     output_file="tts_sse.wav",
 )
 ```
 
-For raw PCM streaming (e.g. real-time playback), use `synthesize_stream()`:
+For chunk-by-chunk streaming (e.g. real-time playback), use `synthesize_stream()`:
 
 ```python
-for pcm_chunk in client.synthesize_stream("Hello!", voice="Pranav", model="timbre-v2.0"):
-    play_audio(pcm_chunk)  # raw PCM, no WAV header
+for audio_chunk in client.synthesize_stream("Hello!", voice="Pranav", model="timbre-v2.0"):
+    play_audio(audio_chunk)  # format depends on audio_config (PCM, OGG, MP3, etc.)
 ```
 
 ### TTS Realtime (WebSocket)
@@ -439,24 +446,24 @@ from gnani.tts import GnaniTTSRealtimeClient, AudioConfig
 
 async def main():
     async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
-        # synthesize_and_collect() returns a valid WAV file
+        # synthesize_and_collect() returns audio matching audio_config
         audio = await client.synthesize_and_collect(
             "Realtime TTS response",
             voice="Kaveri",
             model="timbre-v2.0",
-            audio_config=AudioConfig(sample_rate=16000, encoding="linear_pcm", container="wav"),
+            audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
             output_file="tts_realtime.wav",
         )
 
 asyncio.run(main())
 ```
 
-For raw PCM streaming (e.g. real-time playback):
+For chunk-by-chunk streaming (e.g. real-time playback):
 
 ```python
 async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
-    async for pcm_chunk in client.synthesize("Hello!", voice="Pranav", model="timbre-v2.0"):
-        play_audio(pcm_chunk)  # raw PCM, no WAV header
+    async for audio_chunk in client.synthesize("Hello!", voice="Pranav", model="timbre-v2.0"):
+        play_audio(audio_chunk)  # format depends on audio_config (PCM, OGG, MP3, etc.)
 ```
 
 ### TTS timbre-v2.5 (expanded catalog)
@@ -470,11 +477,99 @@ audio = client.synthesize(
     voice="Kaveri",
     model="timbre-v2.5",
     language="en-IN",
-    audio_config=AudioConfig(container="mp3", sample_rate=22050, bitrate="128k"),
+    speed=1.0,
+    audio_config=AudioConfig(container="mp3", sample_rate=48000, bitrate="128k"),
 )
 ```
 
 The same `model` and `language` parameters work on `GnaniTTSStreamClient` (SSE) and `GnaniTTSRealtimeClient` (WebSocket) when using `timbre-v2.5`.
+
+### TTS Telephony Formats
+
+For telephony integrations (IVR, SIP), use 8 kHz A-law or μ-law:
+
+```python
+from gnani.tts import GnaniTTSClient, AudioConfig
+
+client = GnaniTTSClient(api_key="your-api-key")
+
+# A-law (G.711a) — common in European/Indian telephony
+alaw_audio = client.synthesize(
+    "Hello from Gnani",
+    voice="Pranav",
+    audio_config=AudioConfig(container="alaw", sample_rate=8000),
+)
+
+# μ-law (G.711u) — common in North American telephony
+mulaw_audio = client.synthesize(
+    "Hello from Gnani",
+    voice="Pranav",
+    audio_config=AudioConfig(container="mulaw", sample_rate=8000),
+)
+```
+
+### TTS OGG/Opus
+
+Returns a playable OGG Opus file (`OggS` header). Use either form:
+
+- `container="ogg"` (encoding defaults to `oggopus`)
+- `container="raw", encoding="oggopus"`
+
+Supported at all standard sample rates (8000–48000).
+
+```python
+from gnani.tts import GnaniTTSClient, AudioConfig
+
+client = GnaniTTSClient(api_key="your-api-key")
+
+# Using container="ogg"
+ogg_audio = client.synthesize(
+    "Hello from Gnani",
+    voice="Pranav",
+    audio_config=AudioConfig(container="ogg", encoding="oggopus", sample_rate=48000),
+)
+
+with open("output.ogg", "wb") as f:
+    f.write(ogg_audio)
+```
+
+**SSE / WebSocket:** OGG is delivered as one complete file in a single chunk (not streamable frame-by-frame). For chunk iteration, use `synthesize_stream()` (SSE) or async `synthesize()` (WebSocket) — the buffered `synthesize()` and `synthesize_and_collect()` methods correctly return the raw OGG bytes without WAV wrapping when using non-PCM encodings.
+
+### TTS Audio Format Matrix
+
+Supported combinations of `container`, `encoding`, `sample_rate`, and `bitrate`:
+
+| Container | Encoding | Sample Rates | Bitrate | Notes |
+|-----------|----------|--------------|---------|-------|
+| `wav` | `linear_pcm` | 8000, 16000, 22050, 24000, 44100, 48000 | — | Standard WAV (RIFF header) |
+| `mp3` | `linear_pcm` | 8000, 16000, 22050, 24000, 44100, 48000 | `32k`, `64k`, `96k`, `128k`, `192k` | All 5 bitrates supported |
+| `raw` | `linear_pcm` | 8000, 16000, 22050, 24000, 44100, 48000 | — | Raw PCM, no header |
+| `ogg` | `oggopus` | 8000, 16000, 22050, 24000, 44100, 48000 | — | Playable OGG Opus file |
+| `raw` | `oggopus` | 8000, 16000, 22050, 24000, 44100, 48000 | — | Equivalent to `ogg` |
+| `mulaw` | `linear_pcm` | 8000 | — | G.711μ telephony |
+| `alaw` | `linear_pcm` | 8000 | — | G.711A telephony |
+
+**Notes:**
+- `bitrate` is **only** applicable to `container="mp3"`. It is ignored for all other containers.
+- `mulaw` and `alaw` containers are **telephony-only** — they require `sample_rate=8000`.
+- For telephony, prefer `container="alaw"` / `container="mulaw"` over `encoding="pcm_alaw"` / `encoding="pcm_mulaw"`.
+- `container="ogg"` and `container="raw"` with `encoding="oggopus"` are equivalent — both return a playable OGG Opus file.
+
+> **File extensions:** Match the output file extension to your `audio_config.container` — use `.wav` for WAV, `.mp3` for MP3, `.ogg` for OGG/Opus, `.raw` for raw PCM, `.alaw` / `.ulaw` for telephony.
+
+### TTS Supported Constants
+
+```python
+from gnani.tts import (
+    SUPPORTED_ENCODINGS,     # {"linear_pcm", "oggopus", "pcm_mulaw", "pcm_alaw"}
+    SUPPORTED_CONTAINERS,    # {"raw", "mp3", "wav", "ogg", "mulaw", "alaw"}
+    SUPPORTED_BITRATES,      # {"32k", "64k", "96k", "128k", "192k"}
+    SUPPORTED_SAMPLE_RATES,  # (8000, 16000, 22050, 24000, 44100, 48000)
+    DEFAULT_SPEED,           # 1.0
+    MIN_SPEED,               # 0.85
+    MAX_SPEED,               # 1.15
+)
+```
 
 ### TTS Voices
 
@@ -585,6 +680,36 @@ except StreamError as e:
     print(f"Server error: {e} (at {e.timestamp})")
 ```
 
+### TTS Errors
+
+```python
+from gnani.tts import (
+    GnaniTTSClient,
+    GnaniTTSRealtimeClient,
+    AuthenticationError,
+    APIError,
+    StreamConnectionError,
+    StreamError,
+)
+
+# REST / SSE errors
+try:
+    audio = GnaniTTSClient(api_key="key").synthesize("Hello", voice="Pranav")
+except AuthenticationError:
+    print("Check your API key")
+except APIError as e:
+    print(f"TTS API error {e.status_code}: {e}")
+
+# WebSocket errors
+try:
+    async with GnaniTTSRealtimeClient(api_key="key") as client:
+        audio = await client.synthesize_and_collect("Hello", voice="Pranav")
+except StreamConnectionError as e:
+    print(f"WebSocket connection failed: {e}")
+except StreamError as e:
+    print(f"TTS stream error: {e}")
+```
+
 ## Documentation
 
 Full API reference and guides are available at **[docs.gnani.ai](https://docs.gnani.ai/)**.
@@ -594,6 +719,7 @@ Full API reference and guides are available at **[docs.gnani.ai](https://docs.gn
 - [TTS REST API](https://docs.gnani.ai/api/TTS/tts-inference)
 - [TTS Streaming (SSE)](https://docs.gnani.ai/api/TTS/tts-sse)
 - [TTS Realtime WebSocket](https://docs.gnani.ai/api/TTS/tts-websocket)
+- [Text Normalization Guide](https://docs.gnani.ai/api/TTS/tts-input-formating)
 
 ## License
 
