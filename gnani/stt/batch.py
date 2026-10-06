@@ -63,6 +63,8 @@ TERMINAL_STATUSES = frozenset(
 # Terminal states in which at least some transcripts exist.
 SUCCESS_STATUSES = frozenset({"COMPLETED", "PARTIAL_FAILURE"})
 
+_MAX_RETRIES = 5
+
 _GLOB_CHARS = re.compile(r"[*?\[]")
 
 # ---------------------------------------------------------------------------
@@ -539,13 +541,37 @@ class GnaniSTTBatchClient:
             "X-API-Key-ID": self.api_key,
             "X-API-Request-ID": resolve_request_id(request_id),
         }
-        resp = requests.request(
-            method,
-            f"{self.base_url}{path}",
-            headers=headers,
-            timeout=timeout or self.timeout,
-            **kwargs,
-        )
+        for attempt in range(_MAX_RETRIES + 1):
+            # A retried upload must resend the whole body, so rewind open files.
+            for _, part in kwargs.get("files") or []:
+                fh = part[1]
+                if hasattr(fh, "seek"):
+                    fh.seek(0)
+            resp = requests.request(
+                method,
+                f"{self.base_url}{path}",
+                headers=headers,
+                timeout=timeout or self.timeout,
+                **kwargs,
+            )
+            # 429 is the gateway's rate limit and is refused before any work is done, so it
+            # is safe to retry for every method. 5xx is retried for reads only.
+            retryable = resp.status_code == 429 or (
+                method == "GET" and resp.status_code in (502, 503, 504)
+            )
+            if not retryable or attempt == _MAX_RETRIES:
+                break
+            delay = _retry_delay(resp, attempt)
+            logger.warning(
+                "[STT Batch] %s %s -> %s; retrying in %.1fs (%d/%d)",
+                method,
+                path,
+                resp.status_code,
+                delay,
+                attempt + 1,
+                _MAX_RETRIES,
+            )
+            time.sleep(delay)
         if not 200 <= resp.status_code < 300:
             logger.error("[STT Batch] %s %s failed | status=%s", method, path, resp.status_code)
             raise APIError(resp.status_code, resp.text)
@@ -555,6 +581,14 @@ class GnaniSTTBatchClient:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _retry_delay(resp: requests.Response, attempt: int) -> float:
+    """Seconds to wait before a retry: ``Retry-After`` if given, else 1, 2, 4, 8, 16."""
+    try:
+        return min(float(resp.headers["Retry-After"]), 60.0)
+    except (KeyError, ValueError):
+        return float(2**attempt)
 
 
 def _validate_language(language_code: str) -> str:

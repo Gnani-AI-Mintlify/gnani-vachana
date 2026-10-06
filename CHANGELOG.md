@@ -5,7 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.0]
+## [0.8.1] - 2026-10-06
+
+### Fixed
+
+- **Batch client rate limits** — requests refused with `429 RATE_LIMITED` (seen on the first status poll right after create + start) are now retried up to 5 times, honouring `Retry-After`, else 1/2/4/8/16 s. Reads are also retried on 502/503/504. Uploads are rewound before each retry.
+
+## [0.8.0] - 2026-10-06
 
 ### Added
 
