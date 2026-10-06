@@ -1,5 +1,18 @@
 """Gnani STT - Python client for Gnani's multilingual Speech-to-Text API."""
 
+from gnani.stt.batch import (
+    BatchFile,
+    BatchJob,
+    BatchResult,
+    BatchSegment,
+    GnaniSTTBatchClient,
+)
+from gnani.stt.batch_async import (
+    AsyncBatchFile,
+    AsyncBatchJob,
+    AsyncBatchResult,
+    AsyncGnaniSTTBatchClient,
+)
 from gnani.stt.client import (
     SAMPLE_RATE_8K,
     SAMPLE_RATE_16K,
@@ -21,6 +34,8 @@ from gnani.stt.client import (
 from gnani.stt.exceptions import (
     APIError,
     AuthenticationError,
+    BatchJobFailedError,
+    BatchTimeoutError,
     GnaniSTTError,
     InvalidAudioError,
     StreamClosedError,
@@ -40,7 +55,18 @@ __all__ = [
     "STREAM_SUPPORTED_SAMPLE_RATES",
     "SUPPORTED_LANGUAGES",
     "APIError",
+    "AsyncBatchFile",
+    "AsyncBatchJob",
+    "AsyncBatchResult",
+    "AsyncGnaniSTTBatchClient",
     "AuthenticationError",
+    "BatchFile",
+    "BatchJob",
+    "BatchJobFailedError",
+    "BatchResult",
+    "BatchSegment",
+    "BatchTimeoutError",
+    "GnaniSTTBatchClient",
     "GnaniSTTClient",
     "GnaniSTTError",
     "GnaniSTTStreamClient",

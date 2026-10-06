@@ -32,6 +32,20 @@ result = client.transcribe("audio.wav", language_code="hi-IN")
 print(result["transcript"])
 ```
 
+### STT Batch (many or long files)
+
+```python
+from gnani.stt import GnaniSTTBatchClient
+
+client = GnaniSTTBatchClient()  # reads GNANI_API_KEY
+result = client.transcribe(["call1.wav", "call2.wav"], language_code="hi-IN")
+
+print(result[0].text)
+result.save("./outputs")  # one JSON per file
+```
+
+See [Batch STT usage](#batch-stt-usage) for step-by-step control, diarization, and webhooks.
+
 ### Realtime Streaming (WebSocket)
 
 ```python
@@ -257,6 +271,64 @@ result = client.transcribe(
 for code, name in GnaniSTTClient.supported_languages().items():
     print(f"{code}: {name}")
 ```
+
+## Batch STT Usage
+
+Batch jobs run asynchronously: create, start, wait, fetch. `transcribe()` does all four.
+Limits: 100 files per job, 10 MB per file (ZIP: 50 MB). Larger files are not supported yet.
+
+```python
+from gnani.stt import GnaniSTTBatchClient
+
+client = GnaniSTTBatchClient()
+
+# Files can be a path, a directory, a glob, a ZIP, bytes, a file object, or public URLs.
+result = client.transcribe("./recordings/", language_code="hi-IN,en-IN", speakers=2)
+
+for f in result:
+    print(f.name, "OK" if f.ok else f"FAILED: {f.error}")
+    if f.ok:
+        for seg in f.segments:
+            print(f"  [{seg.start:.1f}-{seg.end:.1f}] speaker {seg.speaker}: {seg.text}")
+```
+
+### Step by step (long jobs, resuming later)
+
+```python
+job = client.create_job("./recordings/*.wav", language_code="hi-IN")  # starts automatically
+print(job.id)                      # keep this to resume
+job.wait(timeout=3600, on_progress=lambda j: print(j.status, j.percent))
+
+job = client.get_job("<job id>")   # e.g. after a restart
+files = job.files()
+job.save("./outputs", text_files=True)
+```
+
+`language_code` takes one code, several comma-separated (identified per speaker turn; the
+first is the fallback), or `"auto"`. Other options: `diarization`, `speakers` (1-8),
+`multi_channel`, `denoise`, `bias_words`, `bias_score`, `callback_url`, `start=False`.
+
+### Async
+
+`AsyncGnaniSTTBatchClient` has the same methods, awaited. Transcripts are downloaded
+concurrently, so `.text` and `.segments` are plain attributes on what `transcribe()` returns
+(after `job.files()` call `await f.load()`, or pass `load=True`).
+
+```python
+from gnani.stt import AsyncGnaniSTTBatchClient
+
+client = AsyncGnaniSTTBatchClient()
+result = await client.transcribe("./recordings/", language_code="hi-IN")
+print(result[0].text)
+await result.save("./outputs")
+
+async for job in client.list_jobs(status="COMPLETED"):
+    print(job.id)
+```
+
+`wait()` returns for `COMPLETED` and `PARTIAL_FAILURE` (check each `BatchFile.ok`) and raises
+`BatchJobFailedError` for `FAILED`, `START_FAILED` and `CANCELLED`, and `BatchTimeoutError`
+on timeout (the job keeps running). It polls every 10 s, the documented minimum.
 
 ## Realtime Streaming Usage
 

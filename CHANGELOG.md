@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Batch STT** — `GnaniSTTBatchClient` for `/stt/v3/batch/jobs`. `client.transcribe(files, language_code)` creates, starts and waits for a job in one call and returns the transcripts; `create_job()` / `get_job()` / `list_jobs()` and `BatchJob.wait()` / `.files()` / `.save()` / `.cancel()` give step-by-step control. Accepts paths, directories, globs, ZIPs, bytes, file objects, or public URLs; validates limits before uploading; sends only the file basename (a `../` in the multipart filename is blocked by Cloudflare's WAF). Exports `BatchJob`, `BatchFile`, `BatchSegment`, `BatchResult`.
+- `BatchTimeoutError`, `BatchJobFailedError`, and `APIError.error_code` (e.g. `TOO_MANY_FILES`).
+- **`AsyncGnaniSTTBatchClient`** — the same API for `asyncio` (`await client.transcribe(...)`, `async for job in client.list_jobs()`). Runs on worker threads over `requests`, so no new dependency; transcripts are downloaded concurrently. Exports `AsyncBatchJob`, `AsyncBatchFile`, `AsyncBatchResult`.
+- Not yet supported: files over 10 MB (resumable upload).
+
 ## [0.7.9] - 2026-07-20
 
 ## [0.7.8] - 2026-07-17
