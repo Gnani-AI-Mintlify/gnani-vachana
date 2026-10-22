@@ -31,16 +31,14 @@ TTS_ENDPOINT = "/api/v1/tts/inference"
 TTS_SSE_ENDPOINT = "/api/v1/tts/sse"
 TTS_WS_ENDPOINT = "/api/v1/tts"
 
-DEFAULT_MODEL = "timbre-v2.0"
-
-TIMBRE_V20_VOICES = frozenset(
-    {
-        "Pranav",
-        "Kaveri",
-        "Shubhra",
-        "Deepak",
-    }
-)
+# TIMBRE_V20_VOICES = frozenset(
+#     {
+#         "Pranav",
+#         "Kaveri",
+#         "Shubhra",
+#         "Deepak",
+#     }
+# )
 
 TIMBRE_V25_VOICES = frozenset(
     {
@@ -115,7 +113,8 @@ TV20 = "timbre-v2.0"
 TV25 = "timbre-v2.5"
 TV30 = "timbre-v3.0"
 
-TIMBRE_MODELS = frozenset({TV20, TV25, TV30})
+DEFAULT_MODEL = TV25
+TIMBRE_MODELS = frozenset({TV25, TV30})
 SUPPORTED_MODELS = TIMBRE_MODELS
 
 SUPPORTED_TTS_LANGUAGES = frozenset(
@@ -240,8 +239,8 @@ def _ws_header_kwargs(headers: dict[str, str]) -> dict[str, Any]:
 def _voices_for_model(model: str) -> frozenset[str]:
     if model == TV25:
         return TIMBRE_V25_VOICES
-    if model == TV20:
-        return TIMBRE_V20_VOICES
+    # if model == TV20:
+    #     return TIMBRE_V20_VOICES
     if model == TV30:
         return TIMBRE_V30_VOICES
     return SUPPORTED_VOICES
@@ -266,7 +265,7 @@ def _build_request_body(
         body["speaker_embedding"] = speaker_embedding.to_dict()
     elif voice is not None:
         body["voice"] = voice
-    if model in (TV25, TV30): # these models support speed
+    if model in TIMBRE_MODELS: # these models support speed
         if language is not None:
             body["language"] = language
         body["speed"] = speed if speed is not None else DEFAULT_SPEED
@@ -329,7 +328,7 @@ def _validate_timbre_options(
     language: str | None = None,
     speed: float | None = None,
 ) -> None:
-    if model not in (TV25, TV30):
+    if model not in TIMBRE_MODELS:
         if language is not None:
             raise ValueError(f"language is only supported for model 'timbre-v2.5' and {TV30}")
         if speed is not None:
