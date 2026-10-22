@@ -100,10 +100,22 @@ TIMBRE_V25_VOICES = frozenset(
     }
 )
 
-# Backward-compatible alias for timbre-v2.0 voices.
-SUPPORTED_VOICES = TIMBRE_V20_VOICES
 
-TIMBRE_MODELS = frozenset({"timbre-v2.0", "timbre-v2.5"})
+TIMBRE_V30_VOICES = frozenset(
+    {
+        "Avinash", "Shivani", "Lakshmi", "Kalpana", "Shubham", "Prakash", "Devansh",
+        "Yashraj", "Chetana", "Vasudha", "Riyaa", "Tarika", "Harshad",
+    }
+)
+
+# Backward-compatible alias for timbre-v2.0 voices.
+SUPPORTED_VOICES = TIMBRE_V25_VOICES
+
+TV20 = "timbre-v2.0"
+TV25 = "timbre-v2.5"
+TV30 = "timbre-v3.0"
+
+TIMBRE_MODELS = frozenset({TV20, TV25, TV30})
 SUPPORTED_MODELS = TIMBRE_MODELS
 
 SUPPORTED_TTS_LANGUAGES = frozenset(
@@ -226,10 +238,12 @@ def _ws_header_kwargs(headers: dict[str, str]) -> dict[str, Any]:
 
 
 def _voices_for_model(model: str) -> frozenset[str]:
-    if model == "timbre-v2.5":
+    if model == TV25:
         return TIMBRE_V25_VOICES
-    if model == "timbre-v2.0":
+    if model == TV20:
         return TIMBRE_V20_VOICES
+    if model == TV30:
+        return TIMBRE_V30_VOICES
     return SUPPORTED_VOICES
 
 
@@ -252,7 +266,7 @@ def _build_request_body(
         body["speaker_embedding"] = speaker_embedding.to_dict()
     elif voice is not None:
         body["voice"] = voice
-    if model == "timbre-v2.5":
+    if model in (TV25, TV30): # these models support speed
         if language is not None:
             body["language"] = language
         body["speed"] = speed if speed is not None else DEFAULT_SPEED
@@ -315,11 +329,11 @@ def _validate_timbre_options(
     language: str | None = None,
     speed: float | None = None,
 ) -> None:
-    if model != "timbre-v2.5":
+    if model not in (TV25, TV30):
         if language is not None:
-            raise ValueError("language is only supported for model 'timbre-v2.5'")
+            raise ValueError(f"language is only supported for model 'timbre-v2.5' and {TV30}")
         if speed is not None:
-            raise ValueError("speed is only supported for model 'timbre-v2.5'")
+            raise ValueError(f"speed is only supported for model 'timbre-v2.5'and {TV30}")
         return
     if language is not None and language not in SUPPORTED_TTS_LANGUAGES:
         raise ValueError(
