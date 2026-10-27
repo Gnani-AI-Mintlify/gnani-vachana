@@ -272,6 +272,95 @@ for code, name in GnaniSTTClient.supported_languages().items():
     print(f"{code}: {name}")
 ```
 
+## Prisma v3.0 (multilingual model)
+
+`prisma-v3.0` is one model for all ten languages. It is **opt-in**: pass `model="prisma-v3.0"`;
+without it nothing changes. It works on REST, streaming and batch.
+
+```python
+from gnani.stt import GnaniSTTClient
+
+client = GnaniSTTClient()
+
+# Let the model identify the language
+result = client.transcribe("clip.wav", language_code="indic-auto", model="prisma-v3.0")
+print(result["transcript"], result.get("detected_language_code"))   # "...", "ta-IN"
+
+# Hint the likely languages (2-4); one transcript comes back, in the language heard
+result = client.transcribe(
+    "clip.wav",
+    language_code="indic-auto",
+    model="prisma-v3.0",
+    language_candidates=["hi-IN", "en-IN"],
+)
+
+# Force a language, with context and an output style
+result = client.transcribe(
+    "clip.wav",
+    language_code="hi-IN",
+    model="prisma-v3.0",
+    format="codemix",                     # or "verbatim" / "transcribe" / "transliterate"
+    topic="Loan collection calls for a retail credit card portfolio",
+    keywords=["HDFC Bank", "EMI", "खाता"],
+)
+```
+
+| Option | Where | Notes |
+|---|---|---|
+| `language_code="indic-auto"` | REST, streaming | model identifies the language (batch: `"auto"`) |
+| `language_candidates` | REST, streaming | 2-4 languages, only with `"indic-auto"`. A hint, not a limit. In batch, pass 2-4 comma-separated codes in `language_code` instead |
+| `format="codemix"` | REST, streaming, batch | English stays in Latin, numbers as native words |
+| `format="transliterate"` | REST, streaming | speech written in Latin letters. Not available in batch |
+| `keywords` | REST, streaming, batch | words or short phrases to favour, up to 200 |
+| `topic` | REST, batch | what the audio is about: up to 1,600 characters on REST; batch needs 30-1,600 |
+| `speaker_names` | REST, batch | 1-4 names that may be spoken |
+| `previous_text` | REST | transcript of the previous clip (the last 600 characters are used) |
+
+REST and streaming take any combination of the context options. Batch accepts only `keywords`,
+`topic`, `topic` + `keywords`, or `speaker_names`. These options raise `ValueError` with any other model. REST audio is limited
+to 30 s per request with this model.
+
+Responses add `detected_language_code` (judged from the transcript's script) and, if the
+model had to cut the text short, `truncated: true`.
+
+**Streaming:**
+
+```python
+from gnani.stt import GnaniSTTStreamClient, StreamTranscriptEvent
+
+async with GnaniSTTStreamClient(
+    language_code="indic-auto",
+    model="prisma-v3.0",
+    language_candidates=["hi-IN", "en-IN"],   # optional
+    keywords=["Vachana", "UPI"],              # optional
+) as stream:
+    async for event in stream:
+        if isinstance(event, StreamTranscriptEvent):
+            print(event.detected_language_code, event.text)
+```
+
+**Batch:**
+
+```python
+from gnani.stt import GnaniSTTBatchClient
+
+result = GnaniSTTBatchClient().transcribe(
+    "./calls/",
+    language_code="hi-IN,en-IN",        # one code, "auto", or 2-4 codes
+    model="prisma-v3.0",
+    format="transcribe",
+    keywords=["HDFC Bank", "EMI"],
+    speakers=2,
+)
+for f in result:
+    print(f.name, f.language)           # language covering the most speech
+    for seg in f.segments:
+        print(seg.language, seg.text)   # language of each segment
+```
+
+With `prisma-v3.0` the language is decided per segment by the model, so there is no
+fallback language and order in `language_code` does not matter.
+
 ## Batch STT Usage
 
 Batch jobs run asynchronously: create, start, wait, fetch. `transcribe()` does all four.
@@ -305,8 +394,10 @@ job.save("./outputs", text_files=True)
 ```
 
 `language_code` takes one code, several comma-separated (identified per speaker turn; the
-first is the fallback), or `"auto"`. Other options: `diarization`, `speakers` (1-8),
-`multi_channel`, `denoise`, `bias_words`, `bias_score`, `callback_url`, `start=False`.
+first is the fallback), or `"auto"`. Other options: `model`, `diarization`, `speakers` (1-8),
+`multi_channel`, `denoise`, `bias_words`, `bias_score`, `callback_url`, `start=False`, and
+for `model="prisma-v3.0"` also `format`, `keywords`, `topic` and `speaker_names` (see
+[Prisma v3.0](#prisma-v30-multilingual-model)).
 
 ### Async
 
@@ -427,6 +518,20 @@ async def main():
 asyncio.run(main())
 ```
 
+### Number formatting (ITN) on streaming
+
+`format` is sent as `x-format`. Leave it out for the server default (ITN on for `hi-IN` and
+`en-IN`, off for other languages), pass `"verbatim"` to switch ITN off, or `"transcribe"` to
+switch it on. `enable_itn=True` (`x-enable-itn`) turns ITN on without choosing a format, and
+`itn_native_numerals=True` (`x-itn-native-numerals`) writes digits in the native script
+whenever ITN runs — it does not turn ITN on by itself.
+
+```python
+GnaniSTTStreamClient(language_code="hi-IN", format="verbatim")    # Hindi, ITN off
+GnaniSTTStreamClient(language_code="ta-IN", enable_itn=True,      # Tamil, ITN on,
+                     itn_native_numerals=True)                    # native digits
+```
+
 ### Using 8 kHz audio
 
 ```python
@@ -445,7 +550,7 @@ All events are typed dataclasses:
 |--------------------------|------------------------------------------------------------------------|----------------------------------------------|
 | `StreamConnectedEvent`   | `message`, `timestamp`, `sample_rate`, `chunk_size`, `raw`             | Handshake confirmation with server config    |
 | `StreamProcessingEvent`  | `timestamp`, `raw`                                                     | VAD detected end-of-speech, transcribing     |
-| `StreamTranscriptEvent`  | `text`, `audio_duration_ms`, `segment_id`, `segment_index`, `latency`, `timestamp`, `raw` | Completed transcription for a speech segment |
+| `StreamTranscriptEvent`  | `text`, `audio_duration_ms`, `segment_id`, `segment_index`, `latency`, `timestamp`, `raw`, `detected_language_code` (`prisma-v3.0` only) | Completed transcription for a speech segment |
 | `StreamErrorEvent`       | `message`, `timestamp`, `raw`                                          | Server-side error                            |
 
 ### Accessing the raw JSON payload

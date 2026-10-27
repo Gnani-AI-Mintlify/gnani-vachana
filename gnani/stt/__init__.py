@@ -1,5 +1,10 @@
 """Gnani STT - Python client for Gnani's multilingual Speech-to-Text API."""
 
+from gnani.stt._prisma import (
+    INDIC_AUTO_LANGUAGE_CODE,
+    PRISMA_V3_FORMATS,
+    PRISMA_V3_MODEL,
+)
 from gnani.stt.batch import (
     BatchFile,
     BatchJob,
@@ -45,6 +50,9 @@ from gnani.stt.exceptions import (
 
 __version__ = "0.8.1"
 __all__ = [
+    "INDIC_AUTO_LANGUAGE_CODE",
+    "PRISMA_V3_FORMATS",
+    "PRISMA_V3_MODEL",
     "SAMPLE_RATE_8K",
     "SAMPLE_RATE_16K",
     "SAMPLE_RATE_44K",

@@ -94,6 +94,11 @@ class AsyncBatchFile:
         self._need_loaded()
         return self._f.segments
 
+    @property
+    def language(self) -> str | None:
+        self._need_loaded()
+        return self._f.language
+
     def __repr__(self) -> str:
         return f"Async{self._f!r}"
 

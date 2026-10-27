@@ -15,6 +15,18 @@ import requests
 import websockets
 
 from gnani.log import logger, resolve_request_id
+from gnani.stt._prisma import (
+    INDIC_AUTO_LANGUAGE_CODE,
+    PRISMA_V3_MODEL,
+    StrList,
+    build_context,
+    check_format,
+    is_prisma_v3,
+    normalize_model,
+    parse_candidates,
+    parse_keywords,
+    require_prisma_v3,
+)
 from gnani.stt.exceptions import (
     APIError,
     AuthenticationError,
@@ -75,17 +87,43 @@ STREAM_CHUNK_SAMPLES = 512
 STREAM_CHUNK_BYTES = STREAM_CHUNK_SAMPLES * 2  # 16-bit = 2 bytes per sample
 
 
-def _validate_rest_language_code(language_code: str) -> None:
-    """Validate a REST ``language_code``.
+def _validate_language_code(
+    language_code: str, model: str | None, supported: dict[str, str]
+) -> None:
+    """Validate one ``language_code``.
 
-    Accepts a single supported BCP-47 code (e.g. ``"hi-IN"``).
+    Accepts a single supported BCP-47 code (e.g. ``"hi-IN"``), or
+    ``"indic-auto"`` with ``model="prisma-v3.0"``.
     """
-    if language_code in SUPPORTED_LANGUAGES:
+    if language_code in supported:
         return
+    if language_code == INDIC_AUTO_LANGUAGE_CODE:
+        if is_prisma_v3(model):
+            return
+        raise ValueError(
+            f"language_code={INDIC_AUTO_LANGUAGE_CODE!r} needs model={PRISMA_V3_MODEL!r}"
+        )
+    extra = f", or {INDIC_AUTO_LANGUAGE_CODE!r}" if is_prisma_v3(model) else ""
     raise ValueError(
         f"Unsupported language_code '{language_code}'. "
-        f"Choose from: {', '.join(sorted(SUPPORTED_LANGUAGES))}"
+        f"Choose from: {', '.join(sorted(supported))}{extra}"
     )
+
+
+def _resolve_candidates(
+    value: StrList, language_code: str, model: str | None, supported: dict[str, str]
+) -> list[str]:
+    """Candidate languages: prisma-v3.0 only, and only with ``indic-auto``."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return []
+    require_prisma_v3(model, language_candidates=value)
+    if language_code != INDIC_AUTO_LANGUAGE_CODE:
+        # The API would silently drop them and force language_code instead.
+        raise ValueError(
+            f"language_candidates only apply with language_code={INDIC_AUTO_LANGUAGE_CODE!r} "
+            f"(got {language_code!r})"
+        )
+    return parse_candidates(value, supported)
 
 
 def _ws_header_kwargs(headers: dict[str, str]) -> dict[str, Any]:
@@ -169,6 +207,10 @@ class StreamTranscriptEvent:
         ISO-8601 timestamp of the event.
     raw : dict[str, Any]
         The full raw JSON payload from the server.
+    detected_language_code : str | None
+        ``prisma-v3.0`` only: the language of this utterance, judged from the
+        script of its text (e.g. ``"ta-IN"``). ``None`` for other models and
+        for empty text.
     """
 
     text: str
@@ -178,6 +220,7 @@ class StreamTranscriptEvent:
     latency: int
     timestamp: str
     raw: dict[str, Any] = field(repr=False)
+    detected_language_code: str | None = None
 
 
 @dataclass
@@ -205,6 +248,51 @@ StreamEvent = Union[
     StreamTranscriptEvent,
     StreamErrorEvent,
 ]
+
+
+def _build_rest_form(
+    language_code: str,
+    *,
+    model: str | None,
+    format: str,
+    itn_native_numerals: bool,
+    language_candidates: StrList,
+    keywords: StrList,
+    topic: str | None,
+    previous_text: str | None,
+    speaker_names: StrList,
+) -> dict[str, Any]:
+    """Validate REST options and return the ``POST /stt/v3`` form fields."""
+    model = normalize_model(model)
+    _validate_language_code(language_code, model, SUPPORTED_LANGUAGES)
+    check_format(format, model)
+    candidates = _resolve_candidates(language_candidates, language_code, model, SUPPORTED_LANGUAGES)
+    require_prisma_v3(
+        model,
+        keywords=keywords,
+        topic=topic,
+        previous_text=previous_text,
+        speaker_names=speaker_names,
+    )
+
+    data: dict[str, Any] = {"language_code": language_code, "format": format}
+    if model:
+        data["model"] = model
+    if itn_native_numerals:
+        data["itn_native_numerals"] = "true"
+    if candidates:
+        data["multi_lang_codes"] = ",".join(candidates)
+    if is_prisma_v3(model):
+        ctx = build_context(
+            keywords=keywords,
+            topic=topic,
+            previous_text=previous_text,
+            speaker_names=speaker_names,
+        )
+        for key, value in ctx.items():
+            # Lists go as JSON arrays so an item may contain a comma.
+            data[key] = json.dumps(value, ensure_ascii=False) if isinstance(value, list) else value
+    return data
 
 
 class GnaniSTTClient:
@@ -248,8 +336,14 @@ class GnaniSTTClient:
         audio: Union[str, Path, BinaryIO],
         language_code: str = "en-IN",
         *,
+        model: str | None = None,
         format: str = "verbatim",
         itn_native_numerals: bool = False,
+        language_candidates: StrList = None,
+        keywords: StrList = None,
+        topic: str | None = None,
+        previous_text: str | None = None,
+        speaker_names: StrList = None,
         request_id: str | None = None,
     ) -> dict[str, Any]:
         """Transcribe an audio file using Gnani STT.
@@ -260,18 +354,45 @@ class GnaniSTTClient:
             Path to an audio file, or an open file-like object (binary mode).
         language_code : str
             BCP-47 style language code. See ``SUPPORTED_LANGUAGES`` for the
-            full list. Defaults to ``"en-IN"``.
+            full list. Defaults to ``"en-IN"``. With ``model="prisma-v3.0"``,
+            ``"indic-auto"`` lets the model identify the language.
+        model : str, optional
+            STT model. Omit for the default model. ``"prisma-v3.0"`` is the
+            multilingual model; it unlocks ``"indic-auto"``,
+            ``language_candidates``, ``format="codemix"`` and the context
+            options below. Audio is limited to 30 s per request.
         format : str
             ``"verbatim"`` (default) returns raw spoken-form output.
             ``"transcribe"`` enables Inverse Text Normalization (ITN):
             numbers, currency, dates, and phone numbers are written in
             their conventional form. Currently supported for ``hi-IN``
-            and ``en-IN`` only.
+            and ``en-IN`` only (any language with ``prisma-v3.0``).
+            ``"codemix"`` (``prisma-v3.0`` only) keeps English words in
+            Latin script and numbers as native words. ``"transliterate"``
+            (``prisma-v3.0`` only) writes the speech in Latin letters.
         itn_native_numerals : bool
             When ``format="transcribe"``, set ``True`` to render digits in
             the native script of the target language (e.g. ``₹५,०००``
             instead of ``₹5,000`` for Hindi). Has no effect when
-            ``format="verbatim"``. Defaults to ``False``.
+            ``format="verbatim"``, or with ``prisma-v3.0``. Defaults to ``False``.
+        language_candidates : list[str] | str, optional
+            ``prisma-v3.0`` with ``language_code="indic-auto"`` only: 2-4
+            languages the audio is likely in (e.g. ``["hi-IN", "en-IN"]``).
+            A hint, not a limit: one transcript comes back, in the language
+            actually heard.
+        keywords : list[str] | str, optional
+            ``prisma-v3.0`` only. Words or short phrases to favour (names,
+            brands, product terms), up to 200.
+        topic : str, optional
+            ``prisma-v3.0`` only. What the recording is about, up to 1,600 characters.
+        previous_text : str, optional
+            ``prisma-v3.0`` only. Transcript of the clip just before this one,
+            for a long recording sent in pieces (the last 600 characters are used).
+        speaker_names : list[str] | str, optional
+            ``prisma-v3.0`` only. 1-4 names that may be spoken.
+
+            Any combination of ``keywords``, ``topic``, ``previous_text`` and
+            ``speaker_names`` is accepted.
         request_id : str, optional
             Custom request ID for tracking. Auto-generated if omitted.
 
@@ -281,19 +402,31 @@ class GnaniSTTClient:
             The parsed JSON response from the API, containing at minimum
             ``success``, ``request_id``, and ``transcript``, plus response
             metadata such as ``model``, ``processing_time``, and
-            ``end_to_end_latency``.
+            ``end_to_end_latency``. With ``prisma-v3.0`` it also carries
+            ``detected_language_code`` (judged from the transcript's script)
+            and ``truncated: true`` when the transcript was cut short.
 
         Raises
         ------
         InvalidAudioError
             If the file extension is not supported or the file cannot be read.
+        ValueError
+            If an option is invalid, or is ``prisma-v3.0``-only and another
+            model was chosen.
         APIError
             If the API returns a non-200 response.
         """
-        _validate_rest_language_code(language_code)
-
-        if format not in ("verbatim", "transcribe"):
-            raise ValueError(f"format must be 'verbatim' or 'transcribe', got '{format}'")
+        data = _build_rest_form(
+            language_code,
+            model=model,
+            format=format,
+            itn_native_numerals=itn_native_numerals,
+            language_candidates=language_candidates,
+            keywords=keywords,
+            topic=topic,
+            previous_text=previous_text,
+            speaker_names=speaker_names,
+        )
 
         resolved_request_id = resolve_request_id(request_id)
         headers = self._build_headers(resolved_request_id)
@@ -322,11 +455,6 @@ class GnaniSTTClient:
 
             url = f"{self.base_url}{STT_ENDPOINT}"
             files = {"audio_file": file_handle}
-            data: dict[str, Any] = {"language_code": language_code, "format": format}
-
-            if itn_native_numerals:
-                data["itn_native_numerals"] = "true"
-
             response = requests.post(
                 url,
                 headers=headers,
@@ -358,8 +486,14 @@ class GnaniSTTClient:
         filename: str = "audio.wav",
         language_code: str = "en-IN",
         *,
+        model: str | None = None,
         format: str = "verbatim",
         itn_native_numerals: bool = False,
+        language_candidates: StrList = None,
+        keywords: StrList = None,
+        topic: str | None = None,
+        previous_text: str | None = None,
+        speaker_names: StrList = None,
         request_id: str | None = None,
     ) -> dict[str, Any]:
         """Transcribe raw audio bytes.
@@ -371,11 +505,10 @@ class GnaniSTTClient:
         filename : str
             Filename hint so the server can infer the format.
         language_code : str
-            Target language code.
-        format : str
-            ``"verbatim"`` (default) or ``"transcribe"`` (enables ITN).
-        itn_native_numerals : bool
-            When ``format="transcribe"``, render digits in native script.
+            Target language code (``"indic-auto"`` with ``prisma-v3.0``).
+        model, format, itn_native_numerals, language_candidates, keywords, \
+        topic, previous_text, speaker_names
+            As for :meth:`transcribe`.
         request_id : str, optional
             Custom request ID.
 
@@ -384,10 +517,17 @@ class GnaniSTTClient:
         dict
             Parsed JSON response from the API.
         """
-        _validate_rest_language_code(language_code)
-
-        if format not in ("verbatim", "transcribe"):
-            raise ValueError(f"format must be 'verbatim' or 'transcribe', got '{format}'")
+        data = _build_rest_form(
+            language_code,
+            model=model,
+            format=format,
+            itn_native_numerals=itn_native_numerals,
+            language_candidates=language_candidates,
+            keywords=keywords,
+            topic=topic,
+            previous_text=previous_text,
+            speaker_names=speaker_names,
+        )
 
         resolved_request_id = resolve_request_id(request_id)
         headers = self._build_headers(resolved_request_id)
@@ -398,11 +538,6 @@ class GnaniSTTClient:
         )
         url = f"{self.base_url}{STT_ENDPOINT}"
         files = {"audio_file": (filename, audio_bytes)}
-        data: dict[str, Any] = {"language_code": language_code, "format": format}
-
-        if itn_native_numerals:
-            data["itn_native_numerals"] = "true"
-
         response = requests.post(
             url,
             headers=headers,
@@ -464,6 +599,7 @@ def _parse_stream_message(data: str) -> StreamEvent:
             latency=payload.get("latency", 0),
             timestamp=payload.get("timestamp", ""),
             raw=payload,
+            detected_language_code=payload.get("detected_language_code"),
         )
     elif msg_type == "error":
         return StreamErrorEvent(
@@ -497,17 +633,36 @@ class GnaniSTTStreamClient:
         Your API key (sent as ``x-api-key-id`` header).
     language_code : str
         BCP-47 language code for transcription (e.g. ``"hi-IN"``).
-        Defaults to ``"en-IN"``.
+        Defaults to ``"en-IN"``. With ``model="prisma-v3.0"``,
+        ``"indic-auto"`` lets the model identify the language of each utterance.
+    model : str, optional
+        STT model, sent as ``x-model``. Omit for the default model.
+        ``"prisma-v3.0"`` unlocks ``"indic-auto"``, ``language_candidates`` and
+        ``keywords``, and adds ``detected_language_code`` to each transcript.
+    language_candidates : list[str] | str, optional
+        ``prisma-v3.0`` with ``language_code="indic-auto"`` only: 2-4 languages
+        the speaker is likely to use (e.g. ``["hi-IN", "en-IN"]``). A hint, not
+        a limit.
+    keywords : list[str] | str, optional
+        ``prisma-v3.0`` only. Words or short phrases to favour, up to 200.
     sample_rate : int
         Audio sample rate in Hz. One of ``8000``, ``16000``, ``44100``, or
         ``48000``. Defaults to ``16000``. Note the PCM frame spec (512 samples
         / 1024 bytes) is defined for 8 kHz and 16 kHz.
     base_url : str, optional
         Override the default WebSocket base URL.
-    format : str
-        ``"verbatim"`` (default) or ``"transcribe"`` (enables ITN).
+    format : str, optional
+        Sent as ``x-format``. ``"verbatim"`` (no ITN) or ``"transcribe"``
+        (ITN on). Omitted (default): the server decides, which means ITN on for
+        ``hi-IN`` and ``en-IN`` and off for every other language.
+        ``"codemix"`` and ``"transliterate"`` need ``model="prisma-v3.0"``.
+    enable_itn : bool
+        Sent as ``x-enable-itn``. Turns ITN on when ``format`` is omitted, e.g.
+        for a language other than Hindi or English. Ignored when ``format`` is
+        given. Defaults to ``False``.
     itn_native_numerals : bool
-        When ``format="transcribe"``, render digits in native script.
+        Sent as ``x-itn-native-numerals``. Whenever ITN runs, render digits in
+        the native script (e.g. ``₹५,०००``). Does not turn ITN on by itself.
 
     Examples
     --------
@@ -533,9 +688,13 @@ class GnaniSTTStreamClient:
         api_key: str | None = None,
         language_code: str = "en-IN",
         *,
+        model: str | None = None,
+        language_candidates: StrList = None,
+        keywords: StrList = None,
         sample_rate: int = SAMPLE_RATE_16K,
         base_url: str = DEFAULT_BASE_URL,
-        format: str = "verbatim",
+        format: str | None = None,
+        enable_itn: bool = False,
         itn_native_numerals: bool = False,
     ):
         resolved_key = api_key if api_key else os.getenv("GNANI_API_KEY", "")
@@ -550,18 +709,21 @@ class GnaniSTTStreamClient:
             allowed = ", ".join(str(r) for r in STREAM_SUPPORTED_SAMPLE_RATES)
             raise ValueError(f"sample_rate must be one of {allowed}, got {sample_rate}")
 
-        if language_code not in STREAM_SUPPORTED_LANGUAGES:
-            raise ValueError(
-                f"Unsupported language_code '{language_code}'. "
-                f"Choose from: {', '.join(sorted(STREAM_SUPPORTED_LANGUAGES))}"
-            )
+        model = normalize_model(model)
+        _validate_language_code(language_code, model, STREAM_SUPPORTED_LANGUAGES)
+        if format is not None:
+            check_format(format, model)
+        self.language_candidates = _resolve_candidates(
+            language_candidates, language_code, model, STREAM_SUPPORTED_LANGUAGES
+        )
+        require_prisma_v3(model, keywords=keywords)
+        self.keywords = parse_keywords(keywords) if is_prisma_v3(model) else []
 
-        if format not in ("verbatim", "transcribe"):
-            raise ValueError(f"format must be 'verbatim' or 'transcribe', got '{format}'")
-
+        self.model = model
         self.language_code = language_code
         self.sample_rate = sample_rate
         self.format = format
+        self.enable_itn = enable_itn
         self.itn_native_numerals = itn_native_numerals
 
         ws_scheme = "wss" if base_url.startswith("https") else "ws"
@@ -637,10 +799,21 @@ class GnaniSTTStreamClient:
             "x-sample-rate": str(self.sample_rate),
             "x-api-request-id": self._request_id,
         }
-        if self.format != "verbatim":
+        if self.model:
+            headers["x-model"] = self.model
+        if self.language_candidates:
+            headers["x-language-candidates"] = ",".join(self.language_candidates)
+        if self.keywords:
+            # Header values must be ASCII, so non-Latin keywords go JSON-escaped.
+            headers["x-keywords"] = json.dumps(self.keywords)
+        # Omitting x-format leaves the choice to the server (ITN on for hi-IN and
+        # en-IN), so an explicit "verbatim" must be sent to switch ITN off.
+        if self.format is not None:
             headers["x-format"] = self.format
+        if self.enable_itn:
+            headers["x-enable-itn"] = "true"
         if self.itn_native_numerals:
-            headers["itn_native_numerals"] = "true"
+            headers["x-itn-native-numerals"] = "true"
 
         try:
             self._ws = await websockets.connect(

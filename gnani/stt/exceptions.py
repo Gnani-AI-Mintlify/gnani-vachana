@@ -39,7 +39,8 @@ class APIError(GnaniSTTError):
         """Machine-readable ``error_code`` from the response body, if it has one.
 
         Batch STT errors carry codes such as ``TOO_MANY_FILES`` or
-        ``FILE_TOO_LARGE``, either at the top level or nested under ``detail``.
+        ``FILE_TOO_LARGE``, under ``error_code``, ``code`` or ``error``, either at the
+        top level or nested under ``detail``.
         """
         try:
             data: Any = json.loads(self.body)
@@ -50,6 +51,8 @@ class APIError(GnaniSTTError):
             if isinstance(detail, dict):
                 data = detail
             code = data.get("error_code") or data.get("code")
+            if not code and isinstance(data.get("error"), str):
+                code = data["error"]  # batch controller: {"error": "JOB_NOT_FOUND", ...}
             return str(code) if code else None
         return None
 
@@ -67,11 +70,14 @@ class StreamError(GnaniSTTError):
 
     Attributes
     ----------
+    message : str
+        The server's error message.
     timestamp : str | None
         ISO-8601 timestamp of the server error, if available.
     """
 
     def __init__(self, message: str, timestamp: str | None = None) -> None:
+        self.message: str = message
         self.timestamp: str | None = timestamp
         super().__init__(message)
 

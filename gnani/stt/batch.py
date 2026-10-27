@@ -32,6 +32,17 @@ from typing import Any, BinaryIO, Callable
 import requests
 
 from gnani.log import logger, resolve_request_id
+from gnani.stt._prisma import (
+    INDIC_AUTO_LANGUAGE_CODE,
+    PRISMA_V3_BATCH_FORMATS,
+    PRISMA_V3_MAX_CANDIDATES,
+    PRISMA_V3_MODEL,
+    StrList,
+    build_context,
+    is_prisma_v3,
+    normalize_model,
+    require_prisma_v3,
+)
 from gnani.stt.client import DEFAULT_BASE_URL, SUPPORTED_LANGUAGES
 from gnani.stt.exceptions import (
     APIError,
@@ -49,6 +60,8 @@ BATCH_SUPPORTED_EXTENSIONS = frozenset(
     {".wav", ".mp3", ".mp4", ".flac", ".ogg", ".opus", ".m4a", ".aac", ".webm", ".amr"}
 )
 BATCH_MAX_FILES = 100
+# Per-file limit of the inline multipart upload, the only upload path in this
+# release. Larger files (presigned upload) are planned for a later release.
 BATCH_MAX_FILE_BYTES = 10 * 1024 * 1024
 BATCH_MAX_ZIP_BYTES = 50 * 1024 * 1024
 BATCH_MIN_POLL_SECONDS = 10.0
@@ -80,6 +93,10 @@ class BatchSegment:
     end: float
     text: str
     speaker: int | None = None
+    # Language of this segment, when the job identified one per segment:
+    # always for prisma-v3.0 (None for a segment with no text), and for
+    # multi-language jobs on other models.
+    language: str | None = None
 
 
 @dataclass
@@ -134,9 +151,17 @@ class BatchFile:
                 end=float(s.get("end_time", 0.0)),
                 text=str(s.get("text", "")),
                 speaker=s.get("speaker_id"),
+                language=s.get("language_detected"),
             )
             for s in self.transcript.get("segments", [])
         ]
+
+    @property
+    def language(self) -> str | None:
+        """The file's language: the one forced, or (when identified) the one
+        covering the most speech. See :attr:`BatchSegment.language` per segment."""
+        code = self.transcript.get("language_code")
+        return str(code) if code else None
 
     def _download(self) -> dict[str, Any]:
         url = self.transcript_url
@@ -410,6 +435,10 @@ class GnaniSTTBatchClient:
         denoise: bool = False,
         bias_words: str | Iterable[str] | None = None,
         bias_score: float | None = None,
+        format: str | None = None,
+        keywords: StrList = None,
+        topic: str | None = None,
+        speaker_names: StrList = None,
         callback_url: str | None = None,
         start: bool = True,
         request_id: str | None = None,
@@ -421,21 +450,40 @@ class GnaniSTTBatchClient:
         files
             A path, directory (searched recursively), glob pattern, ZIP, list of
             those, ``bytes``, ``(name, bytes)``, an open binary file, or public
-            ``https://`` URLs. Local files and URLs cannot be mixed.
+            ``https://`` URLs. Local files and URLs cannot be mixed. Local
+            files are limited to 10 MB each (ZIP: 50 MB); use URLs for larger
+            audio.
         language_code
             One code (``"hi-IN"``), several comma-separated (``"hi-IN,en-IN"``;
             the language is identified per speaker turn, the first code being
-            the fallback), or ``"auto"``.
+            the fallback), or ``"auto"``. With ``prisma-v3.0`` the language is
+            decided per segment by the model itself, at most 4 codes may be
+            given (a hint, in no particular order), and ``"indic-auto"`` is
+            accepted as another spelling of ``"auto"``.
+        model
+            Recognition model. ``"prisma-v3.0"`` is the multilingual model and
+            unlocks ``format``, ``keywords``, ``topic`` and ``speaker_names``.
         speakers
             Most speakers to separate, 1-8 (a ceiling, not a target). Implies
             ``diarization``.
         bias_words, bias_score
             Words to bias recognition toward, and strength (0, 0.5, 1, 1.5, 2).
+            With ``prisma-v3.0``, ``bias_words`` is used as ``keywords`` when
+            those are not given, and ``bias_score`` is ignored.
+        format
+            ``prisma-v3.0`` only: ``"verbatim"``, ``"transcribe"`` or
+            ``"codemix"``. Omitted: the model's default for the language.
+        keywords, topic, speaker_names
+            ``prisma-v3.0`` only: words or short phrases to favour (up to 200),
+            what the recordings are about (30-1,600 characters), and 1-4 names
+            that may be spoken. Accepted combinations: ``keywords``, ``topic``,
+            ``topic`` + ``keywords``, or ``speaker_names``.
         callback_url
             Optional webhook for the terminal result. Polling stays the source
             of truth.
         """
-        codes = _validate_language(language_code)
+        model = normalize_model(model) or DEFAULT_BATCH_MODEL
+        codes = _validate_language(language_code, model)
         config = _build_config(
             model=model,
             language_code=codes,
@@ -445,6 +493,10 @@ class GnaniSTTBatchClient:
             denoise=denoise,
             bias_words=bias_words,
             bias_score=bias_score,
+            format=format,
+            keywords=keywords,
+            topic=topic,
+            speaker_names=speaker_names,
         )
         locals_, urls = _resolve_inputs(files)
         rid = resolve_request_id(request_id)
@@ -591,11 +643,14 @@ def _retry_delay(resp: requests.Response, attempt: int) -> float:
         return float(2**attempt)
 
 
-def _validate_language(language_code: str) -> str:
+def _validate_language(language_code: str, model: str | None = None) -> str:
     raw = [c.strip() for c in language_code.split(",") if c.strip()]
     if not raw:
         raise ValueError("language_code is required")
-    if "auto" in (c.lower() for c in raw):
+    v3 = is_prisma_v3(model)
+    # prisma-v3.0's realtime spelling of "auto"; the API stores it as "auto".
+    autos = {"auto", INDIC_AUTO_LANGUAGE_CODE} if v3 else {"auto"}
+    if any(c.lower() in autos for c in raw):
         if len(raw) > 1:
             raise ValueError("'auto' cannot be combined with other language codes")
         return "auto"
@@ -605,7 +660,14 @@ def _validate_language(language_code: str) -> str:
             f"Unsupported language_code {', '.join(repr(b) for b in bad)}. "
             f"Choose from: {', '.join(sorted(SUPPORTED_LANGUAGES))}, or 'auto'"
         )
-    return ",".join(dict.fromkeys(raw))  # drop duplicates, keep order (first = fallback)
+    codes = list(dict.fromkeys(raw))  # drop duplicates, keep order (first = fallback)
+    if v3 and len(codes) > PRISMA_V3_MAX_CANDIDATES:
+        raise ValueError(
+            f"{PRISMA_V3_MODEL} accepts at most {PRISMA_V3_MAX_CANDIDATES} candidate "
+            f"languages, got {len(codes)}; use 'auto' to let the model identify the "
+            f"language among all supported languages"
+        )
+    return ",".join(codes)
 
 
 def _build_config(
@@ -618,7 +680,20 @@ def _build_config(
     denoise: bool,
     bias_words: str | Iterable[str] | None,
     bias_score: float | None,
+    format: str | None = None,
+    keywords: StrList = None,
+    topic: str | None = None,
+    speaker_names: StrList = None,
 ) -> dict[str, Any]:
+    require_prisma_v3(
+        model, format=format, keywords=keywords, topic=topic, speaker_names=speaker_names
+    )
+    if is_prisma_v3(model):
+        # bias_words is the older name for keywords on this model and bias_score
+        # means nothing to it — the API folds them the same way.
+        if bias_words and not keywords:
+            keywords = bias_words
+        bias_words, bias_score = None, None
     cfg: dict[str, Any] = {"model": model, "mode": "transcribe", "language_code": language_code}
     if diarization:
         cfg["with_diarization"] = True
@@ -643,6 +718,18 @@ def _build_config(
         if bias_score not in BATCH_BIAS_SCORES:
             raise ValueError(f"bias_score must be one of {BATCH_BIAS_SCORES}, got {bias_score}")
         cfg["bias_score"] = bias_score
+    if is_prisma_v3(model):
+        if format is not None:
+            if format not in PRISMA_V3_BATCH_FORMATS:
+                raise ValueError(
+                    f"format must be one of {', '.join(repr(f) for f in PRISMA_V3_BATCH_FORMATS)}, "
+                    f"got {format!r}"
+                )
+            cfg["format"] = format
+        # previous_text is not offered: a file's segments are transcribed in parallel.
+        cfg.update(
+            build_context(keywords=keywords, topic=topic, speaker_names=speaker_names, batch=True)
+        )
     return cfg
 
 

@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`prisma-v3.0` STT model** — opt-in with `model="prisma-v3.0"` on `GnaniSTTClient.transcribe()` / `transcribe_bytes()`, `GnaniSTTStreamClient` and `GnaniSTTBatchClient.create_job()` / `transcribe()` (and the async batch client). Requests without `model` are unchanged.
+  - `language_code="indic-auto"` lets the model identify the language (batch also takes it as a spelling of `"auto"`).
+  - `language_candidates` (REST, streaming): 2-4 likely languages with `"indic-auto"`. Sent as `multi_lang_codes` / `x-language-candidates`. Batch takes 2-4 codes in `language_code`; more than 4 is refused for this model.
+  - `format="codemix"` (REST, streaming, batch) and `format="transliterate"` (REST, streaming; romanised output).
+  - Context: `keywords` (REST, streaming, batch), `topic` and `speaker_names` (REST, batch), `previous_text` (REST). REST and streaming take any combination and any non-empty `topic` / `previous_text` (as `asr-server` does); batch keeps the controller's rules (`keywords`, `topic`, `topic` + `keywords`, or `speaker_names`; topic 30-1,600 characters).
+  - These options raise `ValueError` with any other model, before anything is uploaded.
+  - `StreamTranscriptEvent.detected_language_code`, `BatchSegment.language` (per segment) and `BatchFile.language` (per file). REST responses carry `detected_language_code` and `truncated` in the returned dict.
+  - Exports `PRISMA_V3_MODEL`, `PRISMA_V3_FORMATS` and `INDIC_AUTO_LANGUAGE_CODE`.
+- `enable_itn` on `GnaniSTTStreamClient` (sent as `x-enable-itn`) turns ITN on without choosing a format, e.g. for Tamil.
+- `model` is now a parameter of the REST and streaming clients (passed through as the `model` form field / `x-model` header).
+
+### Fixed
+
+- **Streaming `itn_native_numerals`** — the option was sent as an `itn_native_numerals` header, which the server does not read, so it had no effect. It is now sent as `x-itn-native-numerals` only.
+- **Streaming `format="verbatim"`** — `GnaniSTTStreamClient` never sent `x-format: verbatim`, and the server turns ITN on for `hi-IN` / `en-IN` when `x-format` is missing, so Hindi and English streams could not switch ITN off. `format` now defaults to `None` (no header, server default — the same wire behaviour as before for callers who did not pass it), and an explicit `"verbatim"` or `"transcribe"` is always sent.
+- **`StreamError.message`** — the published docs read `e.message` on a `StreamError`, which did not exist, so that `except` branch itself raised `AttributeError`. The message is now available as `.message` too (`str(e)` is unchanged).
+- **`APIError.error_code` for batch errors** — the batch controller reports `{"error": "JOB_NOT_FOUND", "message": ...}`, which `error_code` did not read, so it returned `None` for every controller error. It now reads `error` too.
+
+### Unchanged
+
+- Batch local uploads stay limited to 10 MB per file (ZIP: 50 MB). Larger files (presigned upload via `/stt/v3/batch/v2/jobs`) are planned for a later release; use public URLs for larger audio meanwhile.
+
 ## [0.8.1] - 2026-10-06
 
 ### Fixed
