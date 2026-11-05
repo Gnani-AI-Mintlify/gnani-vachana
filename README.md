@@ -1,7 +1,7 @@
 # gnani-vachana
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Official Python client by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
+Official Python client by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT), Text-to-Speech (TTS) and LLM chat completions across REST, SSE streaming, and real-time WebSockets.
 
 > **[Gnani.ai](https://gnani.ai)** is a production-ready speech AI platform with high-accuracy STT and low-latency TTS for 10+ Indian languages, with Timbre voices across REST, SSE, and WebSocket APIs.
 
@@ -75,11 +75,18 @@ from gnani.tts import GnaniTTSClient, AudioConfig
 
 client = GnaniTTSClient(api_key="your-api-key")
 
-# timbre-v2.0 (default model)
+# timbre-v2.5 (default model)
 audio = client.synthesize(
     "नमस्ते, आप कैसे हैं?",
     voice="Pranav",
-    model="timbre-v2.0",
+    model="timbre-v2.5",
+    audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
+)
+
+# timbre-v3.0 — 13 voices, each speaks all ten languages (default voice: Shivani)
+audio = client.synthesize(
+    "नमस्ते, आप कैसे हैं?",
+    model="timbre-v3.0",
     audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
 )
 
@@ -106,7 +113,7 @@ client = GnaniTTSStreamClient(api_key="your-api-key")
 audio = client.synthesize(
     "Hello from Gnani TTS",
     voice="Pranav",
-    model="timbre-v2.0",
+    model="timbre-v2.5",
     audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
     output_file="tts_sse.wav",
 )
@@ -123,7 +130,7 @@ async def main():
         audio = await client.synthesize_and_collect(
             "Hello from Gnani TTS",
             voice="Pranav",
-            model="timbre-v2.0",
+            model="timbre-v2.5",
             audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
             output_file="tts_realtime.wav",
         )
@@ -131,9 +138,106 @@ async def main():
 asyncio.run(main())
 ```
 
+## LLM Chat Completions
+
+`GnaniLLMClient` calls the chat completions API (`POST /v1/chat/completions`, OpenAI-compatible,
+default model `gnani-evon-v3`). The API is stateless: send the whole conversation in `messages`
+on every call. The API key must have access to the LLM API (otherwise `403 SCOPE_NOT_ALLOWED`).
+
+```python
+from gnani.llm import GnaniLLMClient
+
+client = GnaniLLMClient()  # reads GNANI_API_KEY
+
+reply = client.chat([
+    {"role": "system", "content": "Be brief."},
+    {"role": "user", "content": "Say hello in Hindi."},
+])
+print(reply["choices"][0]["message"]["content"])
+print(reply["usage"])  # prompt_tokens, completion_tokens, total_tokens
+```
+
+### Streaming
+
+```python
+for chunk in client.chat_stream(
+    [{"role": "user", "content": "Count 1 to 3."}],
+    include_usage=True,   # adds a last chunk with token usage
+):
+    if chunk["choices"]:
+        print(chunk["choices"][0]["delta"].get("content", ""), end="", flush=True)
+    else:
+        print("\n", chunk["usage"])
+```
+
+`stream` is always sent explicitly, so the result does not depend on the server's default.
+Closing the iterator part-way (`break`) closes the connection.
+
+### Reasoning
+
+`gnani-evon-v3` is a reasoning model. Its thinking comes back in `message["reasoning"]`
+(`delta["reasoning"]` when streaming), before the answer in `content`. Reasoning counts against
+`max_tokens`: with a small limit the reply can end (`finish_reason == "length"`) before any
+answer, and `content` is `None`.
+
+### Tool calling and other options
+
+```python
+reply = client.chat(
+    [{"role": "user", "content": "What is the weather in Pune? Use the tool."}],
+    tools=[{
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Current weather for a city.",
+            "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
+        },
+    }],
+    max_tokens=600,
+)
+call = reply["choices"][0]["message"]["tool_calls"][0]
+print(call["function"]["name"], call["function"]["arguments"])  # get_weather {"city": "Pune"}
+```
+
+Also accepted: `temperature`, `top_p`, `max_tokens`, `stop`, `seed`, `frequency_penalty`,
+`presence_penalty`, `tool_choice`, `response_format`, `request_id`, and `extra_body` (a dict merged
+into the request body). `n > 1` is not supported by the API.
+
+### Clean responses
+
+The model server behind the API adds fields that are not part of the documented response:
+`prompt_logprobs`, `prompt_token_ids`, `kv_transfer_params`, `routed_experts`, `token_ids`,
+`stop_reason`, `system_fingerprint` (which names the server version), and null OpenAI fields such
+as `refusal` and `annotations`. The client returns only the documented fields: `id`, `object`,
+`created`, `model`, `choices` (`index`, `message` / `delta`, `finish_reason`) and `usage`.
+When streaming, the run of empty chunks the model sends before its first token is skipped.
+
+Pass `raw=True` to `chat()` or `chat_stream()` for the body exactly as received.
+`gnani.llm.clean_completion()` applies the same cleanup to a body you already have.
+
+### LLM errors
+
+```python
+from gnani.llm import APIError, StreamError
+
+try:
+    client.chat(messages)
+except APIError as e:
+    print(e.status_code, e.error_code, e.message)
+    # 400 content_filter       -> blocked by the prompt-injection guardrail
+    # 400 model_rejected_request, 404 model_not_found
+    # 401 INVALID_API_KEY, 403 SCOPE_NOT_ALLOWED, 429 RATE_LIMITED   (from the gateway)
+except StreamError as e:
+    print(f"Stream broke: {e}")
+```
+
+`ValueError` is raised, before anything is sent, for empty `messages` or an unknown role.
+Phone numbers, PAN and email addresses in a prompt are masked by the API (`[REDACTED_PHONE]`,
+`[REDACTED_PAN]`, `[REDACTED_EMAIL]`), in the prompt and in the model's output.
+
 ## Authentication
 
-All APIs (STT REST, STT Realtime, TTS) require a single API key:
+All APIs (STT REST, STT Realtime, TTS, LLM) require a single API key:
 
 | Parameter | Header         | Description                           |
 |-----------|----------------|---------------------------------------|
@@ -188,45 +292,57 @@ STT uses BCP-47 locale codes (e.g. `hi-IN`). For the full list of supported lang
 
 TTS uses the **Timbre** engine. Two model IDs are supported:
 
-| Model | Voices | `language` |
-|-------|--------|------------|
-| `timbre-v2.0` (default) | 4 legacy voices | Not supported |
-| `timbre-v2.5` | 42 voices | Supported |
+| Model | Voices | `language` / `speed` |
+|-------|--------|----------------------|
+| `timbre-v2.5` (default) | 42 voices, one preferred language each | Supported |
+| `timbre-v3.0` | 13 voices, each speaks all ten languages | Supported |
 
-> **Migration:** The former model name `vachana-voice-v3` has been renamed to **`timbre-v2.0`**. Update any `model="vachana-voice-v3"` calls to `model="timbre-v2.0"` (or omit `model` to use the default).
+The two models have separate voice catalogs: a voice from one is refused with the other.
 
-#### timbre-v2.0 voices
+> **Migration:** `timbre-v2.0` (formerly `vachana-voice-v3`) is no longer accepted; the client raises `ValueError` for it. Use `timbre-v2.5` (or omit `model`).
 
-| Voice   | Gender | Description              |
-|---------|--------|--------------------------|
-| Pranav  | Male   | Bold, Trustworthy        |
-| Kaveri  | Female | Confident, Bright        |
-| Shubhra | Female | Gentle, Expressive       |
-| Deepak  | Male   | Grounded, Conversational |
+#### Defaults per model
+
+An option you leave out gets the model's default. An option you pass is never replaced.
+
+| Option | `timbre-v2.5` (default model) | `timbre-v3.0` |
+|--------|-------------------------------|---------------|
+| `voice` | `Pranav` | `Shivani` |
+| `language` | not sent (the voice's own language) | not sent |
+| `speed` | `1.0` | `1.0` |
+
+The audio output defaults are the same for both models: `AudioConfig()` is 48000 Hz, `linear_pcm`,
+mono, 16-bit, `wav`. The table is available as `gnani.tts.MODEL_DEFAULTS`. With a
+`speaker_embedding`, no default voice is used. An explicit `voice` that belongs to the other
+model is refused with `ValueError`; it is not swapped for the default.
 
 #### timbre-v2.5 voices
 
 42 Timbre voices across Hindi, English, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali, Gujarati, Punjabi, and Hinglish. Examples: `Nalini`, `Kaveri`, `Asmita`, `Suhana`, `Poorvi`.
+
+#### timbre-v3.0 voices
+
+13 voices, each speaking all ten languages: `Avinash`, `Shivani`, `Lakshmi`, `Kalpana`, `Shubham`, `Prakash`, `Devansh`, `Yashraj`, `Chetana`, `Vasudha`, `Riyaa`, `Tarika`, `Harshad`.
 
 List voices programmatically:
 
 ```python
 from gnani.tts import GnaniTTSClient
 
-print(GnaniTTSClient.supported_voices())                    # timbre-v2.0 (default)
-print(GnaniTTSClient.supported_voices(model="timbre-v2.5")) # 42 voices
+print(GnaniTTSClient.supported_voices())                    # timbre-v2.5 (default), 42 voices
+print(GnaniTTSClient.supported_voices(model="timbre-v3.0")) # 13 voices
 ```
 
-#### timbre-v2.5 optional controls
+#### Optional controls (`timbre-v2.5` and `timbre-v3.0`)
 
-Only **`timbre-v2.5`** accepts the `language` and `speed` parameters:
+Both models accept the `language` and `speed` parameters:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `language` | `str` | BCP-47 code: `auto`, `hi-IN`, `en-IN`, `ta-IN`, `te-IN`, `kn-IN`, `ml-IN`, `mr-IN`, `bn-IN`, `gu-IN`, `pa-IN` |
 | `speed` | `float` | Speaking rate. Range `0.85`–`1.15`. Defaults to `1.0` (normal speed). |
 
-`voice` is required for all Timbre models unless `speaker_embedding` is provided.
+`voice` is optional: leave it out for the model's default voice (see [Defaults per model](#defaults-per-model)), or pass a `speaker_embedding` instead.
 
 ### TTS Languages (Text-to-Speech)
 
@@ -571,8 +687,8 @@ async for event in stream:
 ```python
 from gnani.tts import DEFAULT_MODEL, SUPPORTED_MODELS
 
-print(DEFAULT_MODEL)              # timbre-v2.0
-print(sorted(SUPPORTED_MODELS))   # timbre-v2.0, timbre-v2.5
+print(DEFAULT_MODEL)              # timbre-v2.5
+print(sorted(SUPPORTED_MODELS))   # timbre-v2.5, timbre-v3.0
 ```
 
 ### TTS REST
@@ -582,7 +698,7 @@ from gnani.tts import GnaniTTSClient
 
 client = GnaniTTSClient(api_key="your-api-key")
 # Default audio_config uses sample_rate=48000
-audio = client.synthesize("यह एक टेस्ट है", voice="Pranav", model="timbre-v2.0")
+audio = client.synthesize("यह एक टेस्ट है", voice="Pranav", model="timbre-v2.5")
 with open("tts_rest.wav", "wb") as f:
     f.write(audio)
 ```
@@ -600,7 +716,7 @@ client = GnaniTTSStreamClient(api_key="your-api-key")
 audio = client.synthesize(
     "Streaming TTS response",
     voice="Pranav",
-    model="timbre-v2.0",
+    model="timbre-v2.5",
     audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
     output_file="tts_sse.wav",
 )
@@ -609,7 +725,7 @@ audio = client.synthesize(
 For chunk-by-chunk streaming (e.g. real-time playback), use `synthesize_stream()`:
 
 ```python
-for audio_chunk in client.synthesize_stream("Hello!", voice="Pranav", model="timbre-v2.0"):
+for audio_chunk in client.synthesize_stream("Hello!", voice="Pranav", model="timbre-v2.5"):
     play_audio(audio_chunk)  # format depends on audio_config (PCM, OGG, MP3, etc.)
 ```
 
@@ -627,7 +743,7 @@ async def main():
         audio = await client.synthesize_and_collect(
             "Realtime TTS response",
             voice="Kaveri",
-            model="timbre-v2.0",
+            model="timbre-v2.5",
             audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
             output_file="tts_realtime.wav",
         )
@@ -639,11 +755,11 @@ For chunk-by-chunk streaming (e.g. real-time playback):
 
 ```python
 async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
-    async for audio_chunk in client.synthesize("Hello!", voice="Pranav", model="timbre-v2.0"):
+    async for audio_chunk in client.synthesize("Hello!", voice="Pranav", model="timbre-v2.5"):
         play_audio(audio_chunk)  # format depends on audio_config (PCM, OGG, MP3, etc.)
 ```
 
-### TTS timbre-v2.5 (expanded catalog)
+### TTS language and speed (`timbre-v2.5`, `timbre-v3.0`)
 
 ```python
 from gnani.tts import GnaniTTSClient, AudioConfig
@@ -651,15 +767,15 @@ from gnani.tts import GnaniTTSClient, AudioConfig
 client = GnaniTTSClient(api_key="your-api-key")
 audio = client.synthesize(
     "Hello, this is a Timbre test.",
-    voice="Kaveri",
-    model="timbre-v2.5",
+    voice="Avinash",          # optional: omit to get the model's default (Shivani)
+    model="timbre-v3.0",
     language="en-IN",
     speed=1.0,
     audio_config=AudioConfig(container="mp3", sample_rate=48000, bitrate="128k"),
 )
 ```
 
-The same `model` and `language` parameters work on `GnaniTTSStreamClient` (SSE) and `GnaniTTSRealtimeClient` (WebSocket) when using `timbre-v2.5`.
+The same `model`, `language` and `speed` parameters work on `GnaniTTSStreamClient` (SSE) and `GnaniTTSRealtimeClient` (WebSocket).
 
 ### TTS Telephony Formats
 
@@ -753,14 +869,14 @@ from gnani.tts import (
 List voices for a specific model:
 
 ```python
-from gnani.tts import GnaniTTSClient, TIMBRE_V25_VOICES
+from gnani.tts import GnaniTTSClient, TIMBRE_V25_VOICES, TIMBRE_V30_VOICES
 
-print(GnaniTTSClient.supported_voices())                    # 4 voices (timbre-v2.0)
-print(GnaniTTSClient.supported_voices(model="timbre-v2.5")) # 42 voices
-print(len(TIMBRE_V25_VOICES))                               # 42
+print(GnaniTTSClient.supported_voices())                    # 42 voices (timbre-v2.5, the default)
+print(GnaniTTSClient.supported_voices(model="timbre-v3.0")) # 13 voices
+print(len(TIMBRE_V25_VOICES), len(TIMBRE_V30_VOICES))       # 42 13
 ```
 
-Legacy voices (`Pranav`, `Kaveri`, `Shubhra`, `Deepak`) are valid for `timbre-v2.0` only.
+Each voice is valid for its own model only.
 
 ## Audio Requirements
 

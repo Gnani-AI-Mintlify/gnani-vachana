@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **LLM client (`gnani.llm`)** for the chat completions API (`POST /v1/chat/completions`, default model `gnani-evon-v3`).
+  - `GnaniLLMClient.chat()` returns a whole completion; `chat_stream()` yields `chat.completion.chunk` dicts over SSE (with `include_usage`). Supports `tools` / `tool_choice`, `response_format`, sampling options and `extra_body`.
+  - `stream` is always sent explicitly, so results do not depend on the server's default.
+  - **Responses are cleaned of the model server's internals** (`prompt_logprobs`, `prompt_token_ids`, `kv_transfer_params`, `routed_experts`, `token_ids`, `stop_reason`, `system_fingerprint`, null OpenAI fields). Only documented fields are returned; the empty chunks sent before the first streamed token are skipped. `raw=True` returns the body as received; `clean_completion()` is public.
+  - `APIError` understands both error shapes of the API (`{"error": {...}}` and the gateway's `{"detail": {...}}`) and exposes `error_code` and `message`. `StreamError` covers broken or error events mid-stream.
+  - `gnani.llm` is imported by `import gnani`.
+
+- **Per-model TTS defaults** (`gnani.tts.MODEL_DEFAULTS`): `voice` is `Pranav` for `timbre-v2.5` and `Shivani` for `timbre-v3.0`; `language` is not sent; `speed` is `1.0`.
+
+### Changed
+
+- **`voice` now defaults to `None` on all TTS `synthesize*` methods** (REST, SSE, WebSocket) and resolves to the model's default voice. Before, it defaulted to `"Pranav"` for every model, so `model="timbre-v3.0"` without a `voice` raised `ValueError`. `voice=None` also used to raise for Timbre models; it now picks the default. Behaviour is unchanged for `timbre-v2.5` and for any call that passes `voice`. With a `speaker_embedding`, no default voice is used.
+- README and TTS docstrings now describe the models the client accepts: `timbre-v2.5` (default) and `timbre-v3.0`. `timbre-v2.0` was dropped from the code earlier but the docs still showed it as the default.
+
 ## [0.9.0] - 2026-10-27
 
 ### Added
