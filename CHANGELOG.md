@@ -18,7 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `APIError` understands both error shapes of the API (`{"error": {...}}` and the gateway's `{"detail": {...}}`) and exposes `error_code` and `message`. `StreamError` covers broken or error events mid-stream.
   - `gnani.llm` is imported by `import gnani`.
 
-- **Per-model TTS defaults** (`gnani.tts.MODEL_DEFAULTS`): `voice` is `Pranav` for `timbre-v2.5` and `Shivani` for `timbre-v3.0`; `language` is not sent; `speed` is `1.0`.
+- **Per-model TTS defaults** (`gnani.tts.MODEL_DEFAULTS`): `voice` is `Pranav` for `timbre-v2.5` and `Shivani` for `timbre-v3.0`; `language` is not sent; `speed` is `1.0` for `timbre-v2.5` and not sent for `timbre-v3.0` (see below).
+
+- **Timbre 3.0 speed handling (VAC-559, VAC-557, VAC-554).** `timbre-v3.0` accepts `speed` from `0.8` to `1.2` (it only produces `0.8`, `1.0` and `1.2`; the service rounds to the nearest). `timbre-v2.5` stays at `0.85` to `1.15`. The new `gnani.tts.SPEED_RANGES` holds the range per model, and a speed outside it raises `ValueError` before anything is sent, naming the model and its range. A `bool` or non-number speed raises `ValueError` too. The speed is sent as given: the SDK does not round it. **Needs the service change of VAC-554 to be deployed**: before it, the service rejects `timbre-v3.0` speeds below `0.85` and above `1.15`.
+  - **`timbre-v3.0` without `speed` now sends no `speed`**, so the service applies the voice's own recommended speed (and `1.0` for a voice with none). Before, the SDK always sent `1.0`, so no voice default could apply. `MODEL_DEFAULTS["timbre-v3.0"]["speed"]` is now `None`. `timbre-v2.5` still sends `1.0`. The SDK holds no per-voice speed table.
+  - `MIN_SPEED` and `MAX_SPEED` keep their values (`0.85` and `1.15`) and are now the `timbre-v2.5` range; they are no longer the check for `timbre-v3.0`.
 
 ### Changed
 

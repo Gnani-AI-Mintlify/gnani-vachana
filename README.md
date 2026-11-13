@@ -309,12 +309,16 @@ An option you leave out gets the model's default. An option you pass is never re
 |--------|-------------------------------|---------------|
 | `voice` | `Pranav` | `Shivani` |
 | `language` | not sent (the voice's own language) | not sent |
-| `speed` | `1.0` | `1.0` |
+| `speed` | `1.0` | not sent (the voice's own recommended speed, `1.0` if it has none) |
 
 The audio output defaults are the same for both models: `AudioConfig()` is 48000 Hz, `linear_pcm`,
 mono, 16-bit, `wav`. The table is available as `gnani.tts.MODEL_DEFAULTS`. With a
 `speaker_embedding`, no default voice is used. An explicit `voice` that belongs to the other
 model is refused with `ValueError`; it is not swapped for the default.
+
+For `timbre-v3.0` the SDK sends no `speed` when you leave it out, so the service applies the
+voice's recommended speed (for example, a voice may sound best at `1.2`). The SDK does not know
+these values. Pass `speed=1.0` to force normal speed.
 
 #### timbre-v2.5 voices
 
@@ -340,7 +344,19 @@ Both models accept the `language` and `speed` parameters:
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `language` | `str` | BCP-47 code: `auto`, `hi-IN`, `en-IN`, `ta-IN`, `te-IN`, `kn-IN`, `ml-IN`, `mr-IN`, `bn-IN`, `gu-IN`, `pa-IN` |
-| `speed` | `float` | Speaking rate. Range `0.85`–`1.15`. Defaults to `1.0` (normal speed). |
+| `speed` | `float` | Speaking rate multiplier. The range depends on the model, see below. |
+
+**Speed.** The allowed range is per model (`gnani.tts.SPEED_RANGES`). A value outside it raises
+`ValueError` before anything is sent.
+
+| Model | Range | Left out | Result |
+|-------|-------|----------|--------|
+| `timbre-v2.5` | `0.85`–`1.15` | `1.0` is sent | the speed you give |
+| `timbre-v3.0` | `0.8`–`1.2` | nothing is sent | the voice's recommended speed (`1.0` if it has none) |
+
+`timbre-v3.0` produces only three speeds, `0.8`, `1.0` and `1.2`. The service rounds what you give
+to the nearest of them (a value halfway between two, such as `0.9` or `1.1`, goes to `1.0`), so
+`0.85` and `0.89` give `0.8`, and `1.11` and `1.15` give `1.2`. The SDK sends your value as it is.
 
 `voice` is optional: leave it out for the model's default voice (see [Defaults per model](#defaults-per-model)), or pass a `speaker_embedding` instead.
 
@@ -798,7 +814,7 @@ audio = client.synthesize(
     voice="Avinash",          # optional: omit to get the model's default (Shivani)
     model="timbre-v3.0",
     language="en-IN",
-    speed=1.0,
+    speed=1.2,                # timbre-v3.0: 0.8-1.2; omit to use the voice's recommended speed
     audio_config=AudioConfig(container="mp3", sample_rate=48000, bitrate="128k"),
 )
 ```
@@ -887,8 +903,9 @@ from gnani.tts import (
     SUPPORTED_BITRATES,      # {"32k", "64k", "96k", "128k", "192k"}
     SUPPORTED_SAMPLE_RATES,  # (8000, 16000, 22050, 24000, 44100, 48000)
     DEFAULT_SPEED,           # 1.0
-    MIN_SPEED,               # 0.85
+    MIN_SPEED,               # 0.85  (the timbre-v2.5 range, kept for compatibility)
     MAX_SPEED,               # 1.15
+    SPEED_RANGES,            # {"timbre-v2.5": (0.85, 1.15), "timbre-v3.0": (0.8, 1.2)}
 )
 ```
 
