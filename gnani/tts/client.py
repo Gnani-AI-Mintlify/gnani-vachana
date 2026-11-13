@@ -151,17 +151,6 @@ SPEED_RANGES: dict[str, tuple[float, float]] = {
     TV30: (0.8, 1.2),
 }
 
-# What a request gets for an option the caller left out, per model. The voice
-# catalogs of the two models are disjoint, so there is one default voice each;
-# ``language=None`` means "not sent": the server picks (the voice's own language).
-# The audio defaults are the same for both models and live on ``AudioConfig``.
-# ``speed=None`` for ``timbre-v3.0`` means "not sent": the service then uses the
-# voice's own recommended speed (1.0 for a voice without one), which only it knows.
-MODEL_DEFAULTS: dict[str, dict[str, Any]] = {
-    TV25: {"voice": "Pranav", "language": None, "speed": DEFAULT_SPEED},
-    TV30: {"voice": "Shivani", "language": None, "speed": None},
-}
-
 
 # ---------------------------------------------------------------------------
 # Request / config dataclasses
@@ -266,29 +255,6 @@ def _voices_for_model(model: str) -> frozenset[str]:
     return SUPPORTED_VOICES
 
 
-def _resolve_defaults(
-    model: str,
-    voice: str | None,
-    language: str | None,
-    speed: float | None,
-    speaker_embedding: SpeakerEmbedding | None,
-) -> tuple[str | None, str | None, float | None]:
-    """Fill the options the caller left out with *model*'s defaults.
-
-    *model* must already have passed :func:`_validate_model`. An explicit value is
-    never replaced, and a ``speaker_embedding`` stands in for the voice, so the
-    voice is left unset when one is given.
-    """
-    defaults = MODEL_DEFAULTS[model]
-    if voice is None and speaker_embedding is None:
-        voice = defaults["voice"]
-    if language is None:
-        language = defaults["language"]
-    if speed is None:
-        speed = defaults["speed"]
-    return voice, language, speed
-
-
 def _build_request_body(
     text: str,
     voice: str | None,
@@ -311,10 +277,11 @@ def _build_request_body(
     if model in TIMBRE_MODELS: # these models support speed
         if language is not None:
             body["language"] = language
-        if speed is None:
-            speed = MODEL_DEFAULTS[model]["speed"]
-        if speed is not None:  # unset for timbre-v3.0: the voice's default applies
+        if speed is not None:
             body["speed"] = speed
+        elif model == TV25:
+            body["speed"] = DEFAULT_SPEED
+        # timbre-v3.0 without a speed: not sent, the voice's own speed applies
     return body
 
 
@@ -467,7 +434,7 @@ class GnaniTTSClient:
     def synthesize(
         self,
         text: str,
-        voice: str | None = None,
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,
@@ -486,21 +453,19 @@ class GnaniTTSClient:
         voice : str, optional
             Pre-defined voice ID (e.g. ``"Pranav"``, ``"Kaveri"``).
             See https://docs.gnani.ai/api/TTS/tts-sse#available-voices
-            Ignored when ``speaker_embedding`` is provided. Defaults to the
-            model's default voice (see ``MODEL_DEFAULTS``: ``"Pranav"`` for
-            ``timbre-v2.5``, ``"Shivani"`` for ``timbre-v3.0``).
+            Ignored when ``speaker_embedding`` is provided. Defaults to ``"Pranav"``.
         model : str
-            TTS model to use. Defaults to ``"timbre-v2.5"``; ``"timbre-v3.0"`` is the other option.
-            The two models have separate voice catalogs, so an explicit
-            ``voice`` must belong to the chosen model.
+            TTS model to use. Defaults to ``"timbre-v2.0"``.
+            Use ``"timbre-v2.5"`` for the expanded voice catalog with
+            ``language`` control.
         language : str, optional
-            BCP-47 language code for ``timbre-v2.5`` and ``timbre-v3.0`` (e.g. ``"hi-IN"``).
+            BCP-47 language code for ``timbre-v2.5`` only (e.g. ``"hi-IN"``).
         speed : float, optional
             Speaking rate multiplier. ``timbre-v2.5``: ``0.85`` to ``1.15``, defaults
             to ``1.0``. ``timbre-v3.0``: ``0.8`` to ``1.2``; the service rounds it to
             the nearest speed it produces (``0.8``, ``1.0`` or ``1.2``). Left out for
-            ``timbre-v3.0``, it is not sent and the voice's recommended speed is used
-            (``1.0`` if the voice has none). See ``SPEED_RANGES``.
+            ``timbre-v3.0``, it is not sent and the voice's own speed is used.
+            See ``SPEED_RANGES``.
         audio_config : AudioConfig, optional
             Output audio configuration. Defaults to 44100 Hz WAV with linear PCM.
         speaker_embedding : SpeakerEmbedding, optional
@@ -522,9 +487,6 @@ class GnaniTTSClient:
             If the API returns a non-200 response.
         """
         _validate_model(model)
-        voice, language, speed = _resolve_defaults(
-            model, voice, language, speed, speaker_embedding
-        )
         _validate_timbre_options(model, language=language, speed=speed)
         _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
@@ -724,7 +686,7 @@ class GnaniTTSStreamClient:
     def synthesize_stream(
         self,
         text: str,
-        voice: str | None = None,
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,
@@ -743,19 +705,17 @@ class GnaniTTSStreamClient:
         text : str
             The text to synthesise.
         voice : str, optional
-            Pre-defined voice ID. Defaults to the model's default voice
-            (see ``MODEL_DEFAULTS``: ``"Pranav"`` for ``timbre-v2.5``,
-            ``"Shivani"`` for ``timbre-v3.0``).
+            Pre-defined voice ID. Defaults to ``"Pranav"``.
         model : str
-            TTS model to use. Defaults to ``"timbre-v2.5"``; ``"timbre-v3.0"`` is the other option.
+            TTS model to use. Defaults to ``"timbre-v2.0"``.
         language : str, optional
-            BCP-47 language code for ``timbre-v2.5`` and ``timbre-v3.0``.
+            BCP-47 language code for ``timbre-v2.5`` only.
         speed : float, optional
             Speaking rate multiplier. ``timbre-v2.5``: ``0.85`` to ``1.15``, defaults
             to ``1.0``. ``timbre-v3.0``: ``0.8`` to ``1.2``; the service rounds it to
             the nearest speed it produces (``0.8``, ``1.0`` or ``1.2``). Left out for
-            ``timbre-v3.0``, it is not sent and the voice's recommended speed is used
-            (``1.0`` if the voice has none). See ``SPEED_RANGES``.
+            ``timbre-v3.0``, it is not sent and the voice's own speed is used.
+            See ``SPEED_RANGES``.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -776,9 +736,6 @@ class GnaniTTSStreamClient:
             If the server sends an error event.
         """
         _validate_model(model)
-        voice, language, speed = _resolve_defaults(
-            model, voice, language, speed, speaker_embedding
-        )
         _validate_timbre_options(model, language=language, speed=speed)
         _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
@@ -834,7 +791,7 @@ class GnaniTTSStreamClient:
     def synthesize(
         self,
         text: str,
-        voice: str | None = None,
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,
@@ -1032,9 +989,6 @@ class GnaniTTSRealtimeClient:
         request_id: str | None,
     ) -> tuple[str, dict[str, Any]]:
         _validate_model(model)
-        voice, language, speed = _resolve_defaults(
-            model, voice, language, speed, speaker_embedding
-        )
         _validate_timbre_options(model, language=language, speed=speed)
         _validate_voice(voice, model, speaker_embedding=speaker_embedding)
 
@@ -1056,7 +1010,7 @@ class GnaniTTSRealtimeClient:
     async def synthesize(
         self,
         text: str,
-        voice: str | None = None,
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,
@@ -1076,19 +1030,17 @@ class GnaniTTSRealtimeClient:
         text : str
             The text to synthesise.
         voice : str, optional
-            Pre-defined voice ID. Defaults to the model's default voice
-            (see ``MODEL_DEFAULTS``: ``"Pranav"`` for ``timbre-v2.5``,
-            ``"Shivani"`` for ``timbre-v3.0``).
+            Pre-defined voice ID. Defaults to ``"Pranav"``.
         model : str
-            TTS model to use. Defaults to ``"timbre-v2.5"``; ``"timbre-v3.0"`` is the other option.
+            TTS model to use. Defaults to ``"timbre-v2.0"``.
         language : str, optional
-            BCP-47 language code for ``timbre-v2.5`` and ``timbre-v3.0``.
+            BCP-47 language code for ``timbre-v2.5`` only.
         speed : float, optional
             Speaking rate multiplier. ``timbre-v2.5``: ``0.85`` to ``1.15``, defaults
             to ``1.0``. ``timbre-v3.0``: ``0.8`` to ``1.2``; the service rounds it to
             the nearest speed it produces (``0.8``, ``1.0`` or ``1.2``). Left out for
-            ``timbre-v3.0``, it is not sent and the voice's recommended speed is used
-            (``1.0`` if the voice has none). See ``SPEED_RANGES``.
+            ``timbre-v3.0``, it is not sent and the voice's own speed is used.
+            See ``SPEED_RANGES``.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -1120,7 +1072,7 @@ class GnaniTTSRealtimeClient:
             "[TTS WS] synthesize start | request_id=%s | model=%s | voice=%s",
             resolved_request_id,
             model,
-            body.get("voice"),
+            voice,
         )
 
         try:
@@ -1201,7 +1153,7 @@ class GnaniTTSRealtimeClient:
     async def synthesize_events(
         self,
         text: str,
-        voice: str | None = None,
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,
@@ -1222,19 +1174,17 @@ class GnaniTTSRealtimeClient:
         text : str
             The text to synthesise.
         voice : str, optional
-            Pre-defined voice ID. Defaults to the model's default voice
-            (see ``MODEL_DEFAULTS``: ``"Pranav"`` for ``timbre-v2.5``,
-            ``"Shivani"`` for ``timbre-v3.0``).
+            Pre-defined voice ID. Defaults to ``"Pranav"``.
         model : str
-            TTS model to use. Defaults to ``"timbre-v2.5"``; ``"timbre-v3.0"`` is the other option.
+            TTS model to use. Defaults to ``"timbre-v2.0"``.
         language : str, optional
-            BCP-47 language code for ``timbre-v2.5`` and ``timbre-v3.0``.
+            BCP-47 language code for ``timbre-v2.5`` only.
         speed : float, optional
             Speaking rate multiplier. ``timbre-v2.5``: ``0.85`` to ``1.15``, defaults
             to ``1.0``. ``timbre-v3.0``: ``0.8`` to ``1.2``; the service rounds it to
             the nearest speed it produces (``0.8``, ``1.0`` or ``1.2``). Left out for
-            ``timbre-v3.0``, it is not sent and the voice's recommended speed is used
-            (``1.0`` if the voice has none). See ``SPEED_RANGES``.
+            ``timbre-v3.0``, it is not sent and the voice's own speed is used.
+            See ``SPEED_RANGES``.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -1262,7 +1212,7 @@ class GnaniTTSRealtimeClient:
             "[TTS WS] synthesize_events start | request_id=%s | model=%s | voice=%s",
             resolved_request_id,
             model,
-            body.get("voice"),
+            voice,
         )
 
         try:
@@ -1375,7 +1325,7 @@ class GnaniTTSRealtimeClient:
     async def synthesize_and_collect(
         self,
         text: str,
-        voice: str | None = None,
+        voice: str | None = "Pranav",
         *,
         model: str = DEFAULT_MODEL,
         language: str | None = None,

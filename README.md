@@ -83,9 +83,10 @@ audio = client.synthesize(
     audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
 )
 
-# timbre-v3.0 — 13 voices, each speaks all ten languages (default voice: Shivani)
+# timbre-v3.0 — 13 voices, each speaks all ten languages
 audio = client.synthesize(
     "नमस्ते, आप कैसे हैं?",
+    voice="Shivani",
     model="timbre-v3.0",
     audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
 )
@@ -204,25 +205,6 @@ The two models have separate voice catalogs: a voice from one is refused with th
 
 > **Migration:** `timbre-v2.0` (formerly `vachana-voice-v3`) is no longer accepted; the client raises `ValueError` for it. Use `timbre-v2.5` (or omit `model`).
 
-#### Defaults per model
-
-An option you leave out gets the model's default. An option you pass is never replaced.
-
-| Option | `timbre-v2.5` (default model) | `timbre-v3.0` |
-|--------|-------------------------------|---------------|
-| `voice` | `Pranav` | `Shivani` |
-| `language` | not sent (the voice's own language) | not sent |
-| `speed` | `1.0` | not sent (the voice's own recommended speed, `1.0` if it has none) |
-
-The audio output defaults are the same for both models: `AudioConfig()` is 48000 Hz, `linear_pcm`,
-mono, 16-bit, `wav`. The table is available as `gnani.tts.MODEL_DEFAULTS`. With a
-`speaker_embedding`, no default voice is used. An explicit `voice` that belongs to the other
-model is refused with `ValueError`; it is not swapped for the default.
-
-For `timbre-v3.0` the SDK sends no `speed` when you leave it out, so the service applies the
-voice's recommended speed (for example, a voice may sound best at `1.2`). The SDK does not know
-these values. Pass `speed=1.0` to force normal speed.
-
 #### timbre-v2.5 voices
 
 42 Timbre voices across Hindi, English, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali, Gujarati, Punjabi, and Hinglish. Examples: `Nalini`, `Kaveri`, `Asmita`, `Suhana`, `Poorvi`.
@@ -255,13 +237,13 @@ Both models accept the `language` and `speed` parameters:
 | Model | Range | Left out | Result |
 |-------|-------|----------|--------|
 | `timbre-v2.5` | `0.85`–`1.15` | `1.0` is sent | the speed you give |
-| `timbre-v3.0` | `0.8`–`1.2` | nothing is sent | the voice's recommended speed (`1.0` if it has none) |
+| `timbre-v3.0` | `0.8`–`1.2` | nothing is sent | the voice's own speed |
 
 `timbre-v3.0` produces only three speeds, `0.8`, `1.0` and `1.2`. The service rounds what you give
 to the nearest of them (a value halfway between two, such as `0.9` or `1.1`, goes to `1.0`), so
 `0.85` and `0.89` give `0.8`, and `1.11` and `1.15` give `1.2`. The SDK sends your value as it is.
 
-`voice` is optional: leave it out for the model's default voice (see [Defaults per model](#defaults-per-model)), or pass a `speaker_embedding` instead.
+`voice` is required for all Timbre models unless `speaker_embedding` is provided.
 
 ### TTS Languages (Text-to-Speech)
 
@@ -714,10 +696,10 @@ from gnani.tts import GnaniTTSClient, AudioConfig
 client = GnaniTTSClient(api_key="your-api-key")
 audio = client.synthesize(
     "Hello, this is a Timbre test.",
-    voice="Avinash",          # optional: omit to get the model's default (Shivani)
+    voice="Avinash",
     model="timbre-v3.0",
     language="en-IN",
-    speed=1.2,                # timbre-v3.0: 0.8-1.2; omit to use the voice's recommended speed
+    speed=1.2,                # timbre-v3.0: 0.8-1.2; omit to use the voice's own speed
     audio_config=AudioConfig(container="mp3", sample_rate=48000, bitrate="128k"),
 )
 ```
