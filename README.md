@@ -1,7 +1,7 @@
 # gnani-vachana
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Official Python client by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
+Official Python client by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT), Text-to-Speech (TTS) and LLM chat completions across REST, SSE streaming, and real-time WebSockets.
 
 > **[Gnani.ai](https://gnani.ai)** is a production-ready speech AI platform with high-accuracy STT and low-latency TTS for 10+ Indian languages, with Timbre voices across REST, SSE, and WebSocket APIs.
 
@@ -17,7 +17,14 @@ Or with [uv](https://docs.astral.sh/uv/):
 uv add gnani-vachana
 ```
 
-Requires **Python 3.9+**.
+The LLM chat completions client is built on the official `openai` package, which is installed
+only when you ask for it:
+
+```bash
+pip install "gnani-vachana[llm]"
+```
+
+STT and TTS need no extra. Requires **Python 3.9+**.
 
 ## Quick Start
 
@@ -139,9 +146,160 @@ async def main():
 asyncio.run(main())
 ```
 
+## LLM Chat Completions
+
+`GnaniLLMClient` and `GnaniAsyncLLMClient` call the chat completions API
+(`POST /v1/chat/completions`, default model `gnani-evon-v3`). They are the official
+[`openai`](https://pypi.org/project/openai/) client, set up for Gnani, so you use them exactly as
+you would use `OpenAI` and `AsyncOpenAI`: `client.chat.completions.create(...)`. Install the extra
+first: `pip install "gnani-vachana[llm]"`.
+
+The API is stateless: send the whole conversation in `messages` on every call. The API key must
+have access to the LLM API (otherwise `403 SCOPE_NOT_ALLOWED`).
+
+```python
+from gnani.llm import GnaniLLMClient
+
+client = GnaniLLMClient()  # reads GNANI_API_KEY
+
+reply = client.chat.completions.create(
+    messages=[
+        {"role": "system", "content": "Be brief."},
+        {"role": "user", "content": "Say hello in Hindi."},
+    ],
+)
+print(reply.choices[0].message.content)
+print(reply.usage.total_tokens)  # also prompt_tokens, completion_tokens
+```
+
+`reply` is the whole answer. `model` defaults to `gnani-evon-v3`, and `stream` to `False`.
+
+> **Why `stream=False`?** The Gnani API streams unless told not to, the opposite of OpenAI's, and
+> the `openai` package leaves `stream` out when you do not set it. Used directly, a plain
+> `create()` would come back as raw server-sent events. These clients send `stream=False` for you.
+
+### Streaming
+
+Pass `stream=True` and read the chunks as they arrive. Each `chunk` is one small piece of the
+answer.
+
+```python
+for chunk in client.chat.completions.create(
+    messages=[{"role": "user", "content": "Count 1 to 3."}],
+    stream=True,
+    stream_options={"include_usage": True},  # adds a last chunk with token usage
+):
+    if chunk.choices:
+        print(chunk.choices[0].delta.content or "", end="", flush=True)
+    else:
+        print("\n", chunk.usage)
+```
+
+### Async
+
+`GnaniAsyncLLMClient` is the same, with `await` and `async for`:
+
+```python
+import asyncio
+from gnani.llm import GnaniAsyncLLMClient
+
+async def main():
+    async with GnaniAsyncLLMClient() as client:
+        reply = await client.chat.completions.create(
+            messages=[{"role": "user", "content": "Say hello in Hindi."}],
+        )
+        print(reply.choices[0].message.content)
+
+        stream = await client.chat.completions.create(
+            messages=[{"role": "user", "content": "Count 1 to 3."}],
+            stream=True,
+        )
+        async for chunk in stream:
+            if chunk.choices:
+                print(chunk.choices[0].delta.content or "", end="", flush=True)
+
+asyncio.run(main())
+```
+
+### Reasoning
+
+`gnani-evon-v3` is a reasoning model. Its thinking comes back in `message.reasoning`
+(`delta.reasoning` when streaming), before the answer in `content`. Reasoning counts against
+`max_tokens`: with a small limit the reply can end (`finish_reason == "length"`) before any
+answer, and `content` is `None`.
+
+### Tool calling and other options
+
+```python
+reply = client.chat.completions.create(
+    messages=[{"role": "user", "content": "What is the weather in Pune? Use the tool."}],
+    tools=[{
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Current weather for a city.",
+            "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
+        },
+    }],
+    max_tokens=600,
+)
+call = reply.choices[0].message.tool_calls[0]
+print(call.function.name, call.function.arguments)  # get_weather {"city": "Pune"}
+```
+
+Also accepted: `temperature`, `top_p`, `max_tokens`, `stop`, `seed`, `frequency_penalty`,
+`presence_penalty`, `tool_choice`, `response_format`, and the per-call `extra_headers`,
+`extra_query`, `extra_body` and `timeout`. `n > 1` is not supported by the API.
+
+To tag a request for support, send your own ID; the API echoes it back and logs it:
+`extra_headers={"X-API-Request-ID": "my-request-1"}`.
+
+### Client options
+
+The clients take every `openai` option on top of `api_key` and `base_url`. The useful ones:
+
+| Option        | Default                     | Notes |
+| ------------- | --------------------------- | ----- |
+| `api_key`     | `GNANI_API_KEY`             | `OPENAI_API_KEY` is never read. |
+| `base_url`    | `https://api.vachana.ai`    | `/v1` is added when missing. |
+| `timeout`     | `120` seconds               | Read timeout; it also applies between streamed chunks. |
+| `max_retries` | `2`                         | Retries connection errors, 408, 409, 429 and 5xx with backoff. `0` turns them off. |
+
+### LLM errors
+
+Errors are the `openai` package's own:
+
+```python
+import openai
+
+try:
+    client.chat.completions.create(messages=messages)
+except openai.APIStatusError as e:
+    print(e.status_code, e.code, e.message)
+    # 400 content_filter       -> blocked by the prompt-injection guardrail
+    # 400 model_rejected_request, 404 model_not_found
+    # 401 INVALID_API_KEY, 403 SCOPE_NOT_ALLOWED, 429 RATE_LIMITED   (from the gateway)
+except openai.APIConnectionError as e:
+    print(f"Could not reach the API: {e}")
+```
+
+Subclasses such as `openai.AuthenticationError`, `openai.RateLimitError` and
+`openai.BadRequestError` are raised for the matching status codes. The API's gateway answers a bad
+key in its own shape (`{"detail": {"error_code", "message"}}`); the clients keep its message and
+put `error_code` in `e.code`, so a rejected key reads
+`Error code: 401 - The API key is not valid. (INVALID_API_KEY)`.
+
+A missing key raises `openai.OpenAIError` when the client is created. Phone numbers, PAN and email
+addresses in a prompt are masked by the API (`[REDACTED_PHONE]`, `[REDACTED_PAN]`,
+`[REDACTED_EMAIL]`), in the prompt and in the model's output.
+
+> The model server behind the API adds fields that are not part of the documented response
+> (`prompt_logprobs`, `kv_transfer_params`, `stop_reason`, ...). They are not removed. They are
+> available in `reply.model_extra` / `reply.model_dump()`; ignore them.
+
 ## Authentication
 
-All APIs (STT REST, STT Realtime, TTS) require a single API key:
+All APIs (STT REST, STT Realtime, TTS, LLM) require a single API key:
 
 | Parameter | Header         | Description                           |
 |-----------|----------------|---------------------------------------|
