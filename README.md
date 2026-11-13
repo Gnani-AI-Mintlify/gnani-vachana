@@ -1,7 +1,7 @@
 # gnani-vachana
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Official Python client by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT), Text-to-Speech (TTS) and LLM chat completions across REST, SSE streaming, and real-time WebSockets.
+Official Python client by [Gnani.ai](https://gnani.ai). Build multilingual voice workflows with Speech-to-Text (STT) and Text-to-Speech (TTS) across REST, SSE streaming, and real-time WebSockets.
 
 > **[Gnani.ai](https://gnani.ai)** is a production-ready speech AI platform with high-accuracy STT and low-latency TTS for 10+ Indian languages, with Timbre voices across REST, SSE, and WebSocket APIs.
 
@@ -138,106 +138,9 @@ async def main():
 asyncio.run(main())
 ```
 
-## LLM Chat Completions
-
-`GnaniLLMClient` calls the chat completions API (`POST /v1/chat/completions`, OpenAI-compatible,
-default model `gnani-evon-v3`). The API is stateless: send the whole conversation in `messages`
-on every call. The API key must have access to the LLM API (otherwise `403 SCOPE_NOT_ALLOWED`).
-
-```python
-from gnani.llm import GnaniLLMClient
-
-client = GnaniLLMClient()  # reads GNANI_API_KEY
-
-reply = client.chat([
-    {"role": "system", "content": "Be brief."},
-    {"role": "user", "content": "Say hello in Hindi."},
-])
-print(reply["choices"][0]["message"]["content"])
-print(reply["usage"])  # prompt_tokens, completion_tokens, total_tokens
-```
-
-### Streaming
-
-```python
-for chunk in client.chat_stream(
-    [{"role": "user", "content": "Count 1 to 3."}],
-    include_usage=True,   # adds a last chunk with token usage
-):
-    if chunk["choices"]:
-        print(chunk["choices"][0]["delta"].get("content", ""), end="", flush=True)
-    else:
-        print("\n", chunk["usage"])
-```
-
-`stream` is always sent explicitly, so the result does not depend on the server's default.
-Closing the iterator part-way (`break`) closes the connection.
-
-### Reasoning
-
-`gnani-evon-v3` is a reasoning model. Its thinking comes back in `message["reasoning"]`
-(`delta["reasoning"]` when streaming), before the answer in `content`. Reasoning counts against
-`max_tokens`: with a small limit the reply can end (`finish_reason == "length"`) before any
-answer, and `content` is `None`.
-
-### Tool calling and other options
-
-```python
-reply = client.chat(
-    [{"role": "user", "content": "What is the weather in Pune? Use the tool."}],
-    tools=[{
-        "type": "function",
-        "function": {
-            "name": "get_weather",
-            "description": "Current weather for a city.",
-            "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
-        },
-    }],
-    max_tokens=600,
-)
-call = reply["choices"][0]["message"]["tool_calls"][0]
-print(call["function"]["name"], call["function"]["arguments"])  # get_weather {"city": "Pune"}
-```
-
-Also accepted: `temperature`, `top_p`, `max_tokens`, `stop`, `seed`, `frequency_penalty`,
-`presence_penalty`, `tool_choice`, `response_format`, `request_id`, and `extra_body` (a dict merged
-into the request body). `n > 1` is not supported by the API.
-
-### Clean responses
-
-The model server behind the API adds fields that are not part of the documented response:
-`prompt_logprobs`, `prompt_token_ids`, `kv_transfer_params`, `routed_experts`, `token_ids`,
-`stop_reason`, `system_fingerprint` (which names the server version), and null OpenAI fields such
-as `refusal` and `annotations`. The client returns only the documented fields: `id`, `object`,
-`created`, `model`, `choices` (`index`, `message` / `delta`, `finish_reason`) and `usage`.
-When streaming, the run of empty chunks the model sends before its first token is skipped.
-
-Pass `raw=True` to `chat()` or `chat_stream()` for the body exactly as received.
-`gnani.llm.clean_completion()` applies the same cleanup to a body you already have.
-
-### LLM errors
-
-```python
-from gnani.llm import APIError, StreamError
-
-try:
-    client.chat(messages)
-except APIError as e:
-    print(e.status_code, e.error_code, e.message)
-    # 400 content_filter       -> blocked by the prompt-injection guardrail
-    # 400 model_rejected_request, 404 model_not_found
-    # 401 INVALID_API_KEY, 403 SCOPE_NOT_ALLOWED, 429 RATE_LIMITED   (from the gateway)
-except StreamError as e:
-    print(f"Stream broke: {e}")
-```
-
-`ValueError` is raised, before anything is sent, for empty `messages` or an unknown role.
-Phone numbers, PAN and email addresses in a prompt are masked by the API (`[REDACTED_PHONE]`,
-`[REDACTED_PAN]`, `[REDACTED_EMAIL]`), in the prompt and in the model's output.
-
 ## Authentication
 
-All APIs (STT REST, STT Realtime, TTS, LLM) require a single API key:
+All APIs (STT REST, STT Realtime, TTS) require a single API key:
 
 | Parameter | Header         | Description                           |
 |-----------|----------------|---------------------------------------|
