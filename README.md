@@ -75,11 +75,19 @@ from gnani.tts import GnaniTTSClient, AudioConfig
 
 client = GnaniTTSClient(api_key="your-api-key")
 
-# timbre-v2.0 (default model)
+# timbre-v2.5 (default model)
 audio = client.synthesize(
     "नमस्ते, आप कैसे हैं?",
     voice="Pranav",
-    model="timbre-v2.0",
+    model="timbre-v2.5",
+    audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
+)
+
+# timbre-v3.0 — 13 voices, each speaks all ten languages
+audio = client.synthesize(
+    "नमस्ते, आप कैसे हैं?",
+    voice="Shivani",
+    model="timbre-v3.0",
     audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
 )
 
@@ -106,7 +114,7 @@ client = GnaniTTSStreamClient(api_key="your-api-key")
 audio = client.synthesize(
     "Hello from Gnani TTS",
     voice="Pranav",
-    model="timbre-v2.0",
+    model="timbre-v2.5",
     audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
     output_file="tts_sse.wav",
 )
@@ -123,7 +131,7 @@ async def main():
         audio = await client.synthesize_and_collect(
             "Hello from Gnani TTS",
             voice="Pranav",
-            model="timbre-v2.0",
+            model="timbre-v2.5",
             audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
             output_file="tts_realtime.wav",
         )
@@ -188,43 +196,52 @@ STT uses BCP-47 locale codes (e.g. `hi-IN`). For the full list of supported lang
 
 TTS uses the **Timbre** engine. Two model IDs are supported:
 
-| Model | Voices | `language` |
-|-------|--------|------------|
-| `timbre-v2.0` (default) | 4 legacy voices | Not supported |
-| `timbre-v2.5` | 42 voices | Supported |
+| Model | Voices | `language` / `speed` |
+|-------|--------|----------------------|
+| `timbre-v2.5` (default) | 42 voices, one preferred language each | Supported |
+| `timbre-v3.0` | 13 voices, each speaks all ten languages | Supported |
 
-> **Migration:** The former model name `vachana-voice-v3` has been renamed to **`timbre-v2.0`**. Update any `model="vachana-voice-v3"` calls to `model="timbre-v2.0"` (or omit `model` to use the default).
+The two models have separate voice catalogs: a voice from one is refused with the other.
 
-#### timbre-v2.0 voices
-
-| Voice   | Gender | Description              |
-|---------|--------|--------------------------|
-| Pranav  | Male   | Bold, Trustworthy        |
-| Kaveri  | Female | Confident, Bright        |
-| Shubhra | Female | Gentle, Expressive       |
-| Deepak  | Male   | Grounded, Conversational |
+> **Migration:** `timbre-v2.0` (formerly `vachana-voice-v3`) is no longer accepted; the client raises `ValueError` for it. Use `timbre-v2.5` (or omit `model`).
 
 #### timbre-v2.5 voices
 
 42 Timbre voices across Hindi, English, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali, Gujarati, Punjabi, and Hinglish. Examples: `Nalini`, `Kaveri`, `Asmita`, `Suhana`, `Poorvi`.
+
+#### timbre-v3.0 voices
+
+13 voices, each speaking all ten languages: `Avinash`, `Shivani`, `Lakshmi`, `Kalpana`, `Shubham`, `Prakash`, `Devansh`, `Yashraj`, `Chetana`, `Vasudha`, `Riyaa`, `Tarika`, `Harshad`.
 
 List voices programmatically:
 
 ```python
 from gnani.tts import GnaniTTSClient
 
-print(GnaniTTSClient.supported_voices())                    # timbre-v2.0 (default)
-print(GnaniTTSClient.supported_voices(model="timbre-v2.5")) # 42 voices
+print(GnaniTTSClient.supported_voices())                    # timbre-v2.5 (default), 42 voices
+print(GnaniTTSClient.supported_voices(model="timbre-v3.0")) # 13 voices
 ```
 
-#### timbre-v2.5 optional controls
+#### Optional controls (`timbre-v2.5` and `timbre-v3.0`)
 
-Only **`timbre-v2.5`** accepts the `language` and `speed` parameters:
+Both models accept the `language` and `speed` parameters:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `language` | `str` | BCP-47 code: `auto`, `hi-IN`, `en-IN`, `ta-IN`, `te-IN`, `kn-IN`, `ml-IN`, `mr-IN`, `bn-IN`, `gu-IN`, `pa-IN` |
-| `speed` | `float` | Speaking rate. Range `0.85`–`1.15`. Defaults to `1.0` (normal speed). |
+| `speed` | `float` | Speaking rate multiplier. The range depends on the model, see below. |
+
+**Speed.** The allowed range is per model (`gnani.tts.SPEED_RANGES`). A value outside it raises
+`ValueError` before anything is sent.
+
+| Model | Range | Left out | Result |
+|-------|-------|----------|--------|
+| `timbre-v2.5` | `0.85`–`1.15` | `1.0` is sent | the speed you give |
+| `timbre-v3.0` | `0.8`–`1.2` | nothing is sent | the voice's own speed |
+
+`timbre-v3.0` produces only three speeds, `0.8`, `1.0` and `1.2`. The service rounds what you give
+to the nearest of them (a value halfway between two, such as `0.9` or `1.1`, goes to `1.0`), so
+`0.85` and `0.89` give `0.8`, and `1.11` and `1.15` give `1.2`. The SDK sends your value as it is.
 
 `voice` is required for all Timbre models unless `speaker_embedding` is provided.
 
@@ -532,6 +549,34 @@ GnaniSTTStreamClient(language_code="ta-IN", enable_itn=True,      # Tamil, ITN o
                      itn_native_numerals=True)                    # native digits
 ```
 
+### Tuning voice-activity detection (VAD)
+
+The server cuts the audio into speech segments with VAD. Six options tune it. Each is sent as a
+connection header and is fixed for the life of the connection (to change one, reconnect). Leave an
+option out to keep the server default. Values outside the range raise `ValueError` when the
+client is created, before anything is sent.
+
+| Option             | Header               | Default             | Range        | What it does |
+| ------------------ | -------------------- | ------------------- | ------------ | ------------ |
+| `vad_threshold`    | `x-vad-threshold`    | `0.7`               | `0.0`–`1.0`  | Speech-probability threshold. Higher rejects more noise but may miss soft speech. |
+| `min_silence_ms`   | `x-min-silence-ms`   | `500`               | `100`–`2000` | Silence after speech before a segment is closed and transcribed. The main latency knob. |
+| `min_speech_ms`    | `x-min-speech-ms`    | `100` (`200` at 8 kHz) | `50`–`2000` | Speech needed before a segment opens. Raise it in noisy rooms. |
+| `min_segment_ms`   | `x-min-segment-ms`   | `120`               | `100`–`1000` | Shorter segments are dropped without a transcript. |
+| `max_speech_s`     | `x-max-speech-s`     | no limit            | `5.0`–`120.0` | Longest a segment may run before it is cut. |
+| `idle_timeout_sec` | `x-idle-timeout-sec` | `60`                | `5`–`900`    | Seconds without speech before the server ends the session. |
+
+```python
+# Faster final transcripts on a clean line (may split a sentence at a pause)
+GnaniSTTStreamClient(language_code="hi-IN", vad_threshold=0.5, min_silence_ms=300)
+
+# Noisy call: stricter detection, longer pauses allowed, one-minute segment cap
+GnaniSTTStreamClient(language_code="en-IN", sample_rate=8000,
+                     vad_threshold=0.75, min_speech_ms=300, max_speech_s=60.0)
+```
+
+The ranges are available as `gnani.stt.STREAM_TUNING_OPTIONS`, and
+`gnani.stt.validate_stream_tuning(name, value)` checks one value.
+
 ### Using 8 kHz audio
 
 ```python
@@ -571,8 +616,8 @@ async for event in stream:
 ```python
 from gnani.tts import DEFAULT_MODEL, SUPPORTED_MODELS
 
-print(DEFAULT_MODEL)              # timbre-v2.0
-print(sorted(SUPPORTED_MODELS))   # timbre-v2.0, timbre-v2.5
+print(DEFAULT_MODEL)              # timbre-v2.5
+print(sorted(SUPPORTED_MODELS))   # timbre-v2.5, timbre-v3.0
 ```
 
 ### TTS REST
@@ -582,7 +627,7 @@ from gnani.tts import GnaniTTSClient
 
 client = GnaniTTSClient(api_key="your-api-key")
 # Default audio_config uses sample_rate=48000
-audio = client.synthesize("यह एक टेस्ट है", voice="Pranav", model="timbre-v2.0")
+audio = client.synthesize("यह एक टेस्ट है", voice="Pranav", model="timbre-v2.5")
 with open("tts_rest.wav", "wb") as f:
     f.write(audio)
 ```
@@ -600,7 +645,7 @@ client = GnaniTTSStreamClient(api_key="your-api-key")
 audio = client.synthesize(
     "Streaming TTS response",
     voice="Pranav",
-    model="timbre-v2.0",
+    model="timbre-v2.5",
     audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
     output_file="tts_sse.wav",
 )
@@ -609,7 +654,7 @@ audio = client.synthesize(
 For chunk-by-chunk streaming (e.g. real-time playback), use `synthesize_stream()`:
 
 ```python
-for audio_chunk in client.synthesize_stream("Hello!", voice="Pranav", model="timbre-v2.0"):
+for audio_chunk in client.synthesize_stream("Hello!", voice="Pranav", model="timbre-v2.5"):
     play_audio(audio_chunk)  # format depends on audio_config (PCM, OGG, MP3, etc.)
 ```
 
@@ -627,7 +672,7 @@ async def main():
         audio = await client.synthesize_and_collect(
             "Realtime TTS response",
             voice="Kaveri",
-            model="timbre-v2.0",
+            model="timbre-v2.5",
             audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
             output_file="tts_realtime.wav",
         )
@@ -639,11 +684,11 @@ For chunk-by-chunk streaming (e.g. real-time playback):
 
 ```python
 async with GnaniTTSRealtimeClient(api_key="your-api-key") as client:
-    async for audio_chunk in client.synthesize("Hello!", voice="Pranav", model="timbre-v2.0"):
+    async for audio_chunk in client.synthesize("Hello!", voice="Pranav", model="timbre-v2.5"):
         play_audio(audio_chunk)  # format depends on audio_config (PCM, OGG, MP3, etc.)
 ```
 
-### TTS timbre-v2.5 (expanded catalog)
+### TTS language and speed (`timbre-v2.5`, `timbre-v3.0`)
 
 ```python
 from gnani.tts import GnaniTTSClient, AudioConfig
@@ -651,15 +696,15 @@ from gnani.tts import GnaniTTSClient, AudioConfig
 client = GnaniTTSClient(api_key="your-api-key")
 audio = client.synthesize(
     "Hello, this is a Timbre test.",
-    voice="Kaveri",
-    model="timbre-v2.5",
+    voice="Avinash",
+    model="timbre-v3.0",
     language="en-IN",
-    speed=1.0,
+    speed=1.2,                # timbre-v3.0: 0.8-1.2; omit to use the voice's own speed
     audio_config=AudioConfig(container="mp3", sample_rate=48000, bitrate="128k"),
 )
 ```
 
-The same `model` and `language` parameters work on `GnaniTTSStreamClient` (SSE) and `GnaniTTSRealtimeClient` (WebSocket) when using `timbre-v2.5`.
+The same `model`, `language` and `speed` parameters work on `GnaniTTSStreamClient` (SSE) and `GnaniTTSRealtimeClient` (WebSocket).
 
 ### TTS Telephony Formats
 
@@ -743,8 +788,9 @@ from gnani.tts import (
     SUPPORTED_BITRATES,      # {"32k", "64k", "96k", "128k", "192k"}
     SUPPORTED_SAMPLE_RATES,  # (8000, 16000, 22050, 24000, 44100, 48000)
     DEFAULT_SPEED,           # 1.0
-    MIN_SPEED,               # 0.85
+    MIN_SPEED,               # 0.85  (the timbre-v2.5 range, kept for compatibility)
     MAX_SPEED,               # 1.15
+    SPEED_RANGES,            # {"timbre-v2.5": (0.85, 1.15), "timbre-v3.0": (0.8, 1.2)}
 )
 ```
 
@@ -753,14 +799,14 @@ from gnani.tts import (
 List voices for a specific model:
 
 ```python
-from gnani.tts import GnaniTTSClient, TIMBRE_V25_VOICES
+from gnani.tts import GnaniTTSClient, TIMBRE_V25_VOICES, TIMBRE_V30_VOICES
 
-print(GnaniTTSClient.supported_voices())                    # 4 voices (timbre-v2.0)
-print(GnaniTTSClient.supported_voices(model="timbre-v2.5")) # 42 voices
-print(len(TIMBRE_V25_VOICES))                               # 42
+print(GnaniTTSClient.supported_voices())                    # 42 voices (timbre-v2.5, the default)
+print(GnaniTTSClient.supported_voices(model="timbre-v3.0")) # 13 voices
+print(len(TIMBRE_V25_VOICES), len(TIMBRE_V30_VOICES))       # 42 13
 ```
 
-Legacy voices (`Pranav`, `Kaveri`, `Shubhra`, `Deepak`) are valid for `timbre-v2.0` only.
+Each voice is valid for its own model only.
 
 ## Audio Requirements
 

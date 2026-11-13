@@ -9,7 +9,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Union, cast
+from typing import TYPE_CHECKING, Any, BinaryIO, Callable, NamedTuple, Union, cast
 
 import requests
 import websockets
@@ -85,6 +85,57 @@ STREAM_SUPPORTED_SAMPLE_RATES = (
 )
 STREAM_CHUNK_SAMPLES = 512
 STREAM_CHUNK_BYTES = STREAM_CHUNK_SAMPLES * 2  # 16-bit = 2 bytes per sample
+
+
+class StreamTuningOption(NamedTuple):
+    """One VAD tuning option of the Realtime WebSocket: header, range and type."""
+
+    header: str
+    minimum: float
+    maximum: float
+    kind: type  # ``int`` or ``float``
+
+
+# VAD tuning options of a Realtime session, in the order the docs list them.
+# They are connection headers, fixed for the life of the connection; omitting one
+# leaves the server default. Types and ranges are the same as in the LiveKit and
+# Pipecat plugins. See https://docs.gnani.ai/api/STT/stt-websocket.
+STREAM_TUNING_OPTIONS: dict[str, StreamTuningOption] = {
+    "vad_threshold": StreamTuningOption("x-vad-threshold", 0.0, 1.0, float),
+    "min_silence_ms": StreamTuningOption("x-min-silence-ms", 100, 2000, int),
+    "min_speech_ms": StreamTuningOption("x-min-speech-ms", 50, 2000, int),
+    "min_segment_ms": StreamTuningOption("x-min-segment-ms", 100, 1000, int),
+    "max_speech_s": StreamTuningOption("x-max-speech-s", 5.0, 120.0, float),
+    "idle_timeout_sec": StreamTuningOption("x-idle-timeout-sec", 5, 900, int),
+}
+
+
+def validate_stream_tuning(name: str, value: float | None) -> None:
+    """Check one VAD tuning option. ``None`` (omitted) is always valid.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` is not a tuning option, or ``value`` has the wrong type
+        (a ``bool`` is never accepted) or is outside the allowed range.
+    """
+    option = STREAM_TUNING_OPTIONS.get(name)
+    if option is None:
+        raise ValueError(f"Unknown tuning option '{name}'")
+    if value is None:
+        return
+    if option.kind is int:
+        valid_type = isinstance(value, int) and not isinstance(value, bool)
+        type_name = "an integer"
+    else:
+        valid_type = isinstance(value, (int, float)) and not isinstance(value, bool)
+        type_name = "a number"
+    if not valid_type:
+        raise ValueError(f"{name} must be {type_name}, got {value!r}")
+    if not option.minimum <= value <= option.maximum:
+        raise ValueError(
+            f"{name} must be between {option.minimum} and {option.maximum}, got {value}"
+        )
 
 
 def _validate_language_code(
@@ -663,6 +714,30 @@ class GnaniSTTStreamClient:
     itn_native_numerals : bool
         Sent as ``x-itn-native-numerals``. Whenever ITN runs, render digits in
         the native script (e.g. ``₹५,०००``). Does not turn ITN on by itself.
+    vad_threshold : float, optional
+        Sent as ``x-vad-threshold``, ``0.0`` to ``1.0`` (server default ``0.7``).
+        Speech-probability threshold: higher rejects more noise but may miss soft
+        speech, lower catches soft speech but may false-trigger.
+    min_silence_ms : int, optional
+        Sent as ``x-min-silence-ms``, ``100`` to ``2000`` (server default ``500``).
+        Silence after speech before a segment is closed and transcribed. The main
+        latency knob: lower is faster but may split a sentence at a pause.
+    min_speech_ms : int, optional
+        Sent as ``x-min-speech-ms``, ``50`` to ``2000`` (server default ``100``,
+        ``200`` at 8 kHz). Speech required before a segment opens; raise it in
+        noisy environments.
+    min_segment_ms : int, optional
+        Sent as ``x-min-segment-ms``, ``100`` to ``1000`` (server default ``120``).
+        Shorter segments are discarded without a transcript.
+    max_speech_s : float, optional
+        Sent as ``x-max-speech-s``, ``5.0`` to ``120.0`` (server default: no
+        limit). Longest a single segment may run before it is cut.
+    idle_timeout_sec : int, optional
+        Sent as ``x-idle-timeout-sec``, ``5`` to ``900`` (server default ``60``).
+        Seconds without speech before the server ends the session.
+
+        The six options above are fixed for the life of the connection; omit one
+        to keep the server default. Out-of-range values raise ``ValueError``.
 
     Examples
     --------
@@ -696,6 +771,12 @@ class GnaniSTTStreamClient:
         format: str | None = None,
         enable_itn: bool = False,
         itn_native_numerals: bool = False,
+        vad_threshold: float | None = None,
+        min_silence_ms: int | None = None,
+        min_speech_ms: int | None = None,
+        min_segment_ms: int | None = None,
+        max_speech_s: float | None = None,
+        idle_timeout_sec: int | None = None,
     ):
         resolved_key = api_key if api_key else os.getenv("GNANI_API_KEY", "")
         if not resolved_key:
@@ -704,6 +785,23 @@ class GnaniSTTStreamClient:
                 "GNANI_API_KEY environment variable."
             )
         self.api_key = resolved_key
+
+        tuning = {
+            "vad_threshold": vad_threshold,
+            "min_silence_ms": min_silence_ms,
+            "min_speech_ms": min_speech_ms,
+            "min_segment_ms": min_segment_ms,
+            "max_speech_s": max_speech_s,
+            "idle_timeout_sec": idle_timeout_sec,
+        }
+        for name, value in tuning.items():
+            validate_stream_tuning(name, value)
+        self.vad_threshold = vad_threshold
+        self.min_silence_ms = min_silence_ms
+        self.min_speech_ms = min_speech_ms
+        self.min_segment_ms = min_segment_ms
+        self.max_speech_s = max_speech_s
+        self.idle_timeout_sec = idle_timeout_sec
 
         if sample_rate not in STREAM_SUPPORTED_SAMPLE_RATES:
             allowed = ", ".join(str(r) for r in STREAM_SUPPORTED_SAMPLE_RATES)
@@ -769,6 +867,36 @@ class GnaniSTTStreamClient:
 
     # -- Connection lifecycle ------------------------------------------------
 
+    def _build_headers(self, request_id: str) -> dict[str, str]:
+        """Connection headers of the Realtime WebSocket for this client's options."""
+        headers: dict[str, str] = {
+            "x-api-key-id": self.api_key,
+            "lang_code": self.language_code,
+            "x-sample-rate": str(self.sample_rate),
+            "x-api-request-id": request_id,
+        }
+        if self.model:
+            headers["x-model"] = self.model
+        if self.language_candidates:
+            headers["x-language-candidates"] = ",".join(self.language_candidates)
+        if self.keywords:
+            # Header values must be ASCII, so non-Latin keywords go JSON-escaped.
+            headers["x-keywords"] = json.dumps(self.keywords)
+        # Omitting x-format leaves the choice to the server (ITN on for hi-IN and
+        # en-IN), so an explicit "verbatim" must be sent to switch ITN off.
+        if self.format is not None:
+            headers["x-format"] = self.format
+        if self.enable_itn:
+            headers["x-enable-itn"] = "true"
+        if self.itn_native_numerals:
+            headers["x-itn-native-numerals"] = "true"
+        # VAD tuning: only what the caller set; the rest keeps the server default.
+        for name, option in STREAM_TUNING_OPTIONS.items():
+            value = getattr(self, name)
+            if value is not None:
+                headers[option.header] = str(value)
+        return headers
+
     async def connect(self, request_id: str | None = None) -> StreamConnectedEvent:
         """Open the WebSocket connection and wait for the ``connected`` event.
 
@@ -793,27 +921,7 @@ class GnaniSTTStreamClient:
             self._request_id,
             self.language_code,
         )
-        headers: dict[str, str] = {
-            "x-api-key-id": self.api_key,
-            "lang_code": self.language_code,
-            "x-sample-rate": str(self.sample_rate),
-            "x-api-request-id": self._request_id,
-        }
-        if self.model:
-            headers["x-model"] = self.model
-        if self.language_candidates:
-            headers["x-language-candidates"] = ",".join(self.language_candidates)
-        if self.keywords:
-            # Header values must be ASCII, so non-Latin keywords go JSON-escaped.
-            headers["x-keywords"] = json.dumps(self.keywords)
-        # Omitting x-format leaves the choice to the server (ITN on for hi-IN and
-        # en-IN), so an explicit "verbatim" must be sent to switch ITN off.
-        if self.format is not None:
-            headers["x-format"] = self.format
-        if self.enable_itn:
-            headers["x-enable-itn"] = "true"
-        if self.itn_native_numerals:
-            headers["x-itn-native-numerals"] = "true"
+        headers = self._build_headers(self._request_id)
 
         try:
             self._ws = await websockets.connect(

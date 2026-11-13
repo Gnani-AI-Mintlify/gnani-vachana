@@ -139,8 +139,17 @@ SUPPORTED_BITRATES = frozenset({"32k", "64k", "96k", "128k", "192k"})
 SUPPORTED_SAMPLE_RATES = (8000, 16000, 22050, 24000, 44100, 48000)
 
 DEFAULT_SPEED = 1.0
+# ``MIN_SPEED`` / ``MAX_SPEED`` are the ``timbre-v2.5`` range, kept as they were. The
+# range depends on the model: use ``SPEED_RANGES`` for the one a request is checked
+# against.
 MIN_SPEED = 0.85
 MAX_SPEED = 1.15
+# Speed range accepted per model, as ``(minimum, maximum)``. ``timbre-v3.0`` only
+# produces 0.8, 1.0 and 1.2: the service rounds any accepted speed to the nearest.
+SPEED_RANGES: dict[str, tuple[float, float]] = {
+    TV25: (MIN_SPEED, MAX_SPEED),
+    TV30: (0.8, 1.2),
+}
 
 
 # ---------------------------------------------------------------------------
@@ -268,7 +277,11 @@ def _build_request_body(
     if model in TIMBRE_MODELS: # these models support speed
         if language is not None:
             body["language"] = language
-        body["speed"] = speed if speed is not None else DEFAULT_SPEED
+        if speed is not None:
+            body["speed"] = speed
+        elif model == TV25:
+            body["speed"] = DEFAULT_SPEED
+        # timbre-v3.0 without a speed: not sent, the voice's own speed applies
     return body
 
 
@@ -332,17 +345,22 @@ def _validate_timbre_options(
         if language is not None:
             raise ValueError(f"language is only supported for model 'timbre-v2.5' and {TV30}")
         if speed is not None:
-            raise ValueError(f"speed is only supported for model 'timbre-v2.5'and {TV30}")
+            raise ValueError(f"speed is only supported for model 'timbre-v2.5' and {TV30}")
         return
     if language is not None and language not in SUPPORTED_TTS_LANGUAGES:
         raise ValueError(
             f"Unsupported language '{language}'. "
             f"Choose from: {', '.join(sorted(SUPPORTED_TTS_LANGUAGES))}"
         )
-    if speed is not None and not MIN_SPEED <= speed <= MAX_SPEED:
-        raise ValueError(
-            f"Unsupported speed '{speed}'. Choose a value between {MIN_SPEED} and {MAX_SPEED}."
-        )
+    if speed is not None:
+        low, high = SPEED_RANGES[model]
+        if isinstance(speed, bool) or not isinstance(speed, (int, float)):
+            raise ValueError(f"speed must be a number, got {speed!r}")
+        if not low <= speed <= high:
+            raise ValueError(
+                f"Unsupported speed '{speed}' for model '{model}'. "
+                f"Choose a value between {low} and {high}."
+            )
 
 
 def _save_audio(audio: bytes, output_file: str | Path) -> Path:
@@ -443,8 +461,11 @@ class GnaniTTSClient:
         language : str, optional
             BCP-47 language code for ``timbre-v2.5`` only (e.g. ``"hi-IN"``).
         speed : float, optional
-            Speaking rate for ``timbre-v2.5`` only. Recommended range
-            ``0.85`` to ``1.15``. Defaults to ``1.0`` (normal).
+            Speaking rate multiplier. ``timbre-v2.5``: ``0.85`` to ``1.15``, defaults
+            to ``1.0``. ``timbre-v3.0``: ``0.8`` to ``1.2``; the service rounds it to
+            the nearest speed it produces (``0.8``, ``1.0`` or ``1.2``). Left out for
+            ``timbre-v3.0``, it is not sent and the voice's own speed is used.
+            See ``SPEED_RANGES``.
         audio_config : AudioConfig, optional
             Output audio configuration. Defaults to 44100 Hz WAV with linear PCM.
         speaker_embedding : SpeakerEmbedding, optional
@@ -690,8 +711,11 @@ class GnaniTTSStreamClient:
         language : str, optional
             BCP-47 language code for ``timbre-v2.5`` only.
         speed : float, optional
-            Speaking rate for ``timbre-v2.5`` only. Recommended range
-            ``0.85`` to ``1.15``. Defaults to ``1.0`` (normal).
+            Speaking rate multiplier. ``timbre-v2.5``: ``0.85`` to ``1.15``, defaults
+            to ``1.0``. ``timbre-v3.0``: ``0.8`` to ``1.2``; the service rounds it to
+            the nearest speed it produces (``0.8``, ``1.0`` or ``1.2``). Left out for
+            ``timbre-v3.0``, it is not sent and the voice's own speed is used.
+            See ``SPEED_RANGES``.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -1012,8 +1036,11 @@ class GnaniTTSRealtimeClient:
         language : str, optional
             BCP-47 language code for ``timbre-v2.5`` only.
         speed : float, optional
-            Speaking rate for ``timbre-v2.5`` only. Recommended range
-            ``0.85`` to ``1.15``. Defaults to ``1.0`` (normal).
+            Speaking rate multiplier. ``timbre-v2.5``: ``0.85`` to ``1.15``, defaults
+            to ``1.0``. ``timbre-v3.0``: ``0.8`` to ``1.2``; the service rounds it to
+            the nearest speed it produces (``0.8``, ``1.0`` or ``1.2``). Left out for
+            ``timbre-v3.0``, it is not sent and the voice's own speed is used.
+            See ``SPEED_RANGES``.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
@@ -1153,8 +1180,11 @@ class GnaniTTSRealtimeClient:
         language : str, optional
             BCP-47 language code for ``timbre-v2.5`` only.
         speed : float, optional
-            Speaking rate for ``timbre-v2.5`` only. Recommended range
-            ``0.85`` to ``1.15``. Defaults to ``1.0`` (normal).
+            Speaking rate multiplier. ``timbre-v2.5``: ``0.85`` to ``1.15``, defaults
+            to ``1.0``. ``timbre-v3.0``: ``0.8`` to ``1.2``; the service rounds it to
+            the nearest speed it produces (``0.8``, ``1.0`` or ``1.2``). Left out for
+            ``timbre-v3.0``, it is not sent and the voice's own speed is used.
+            See ``SPEED_RANGES``.
         audio_config : AudioConfig, optional
             Output audio configuration.
         speaker_embedding : SpeakerEmbedding, optional
