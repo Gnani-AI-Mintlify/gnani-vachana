@@ -51,7 +51,7 @@ from gnani.stt.exceptions import (
     StreamError,
 )
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 __all__ = [
     "INDIC_AUTO_LANGUAGE_CODE",
     "PRISMA_V3_FORMATS",
