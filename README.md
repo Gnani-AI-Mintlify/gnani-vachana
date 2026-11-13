@@ -648,6 +648,34 @@ GnaniSTTStreamClient(language_code="ta-IN", enable_itn=True,      # Tamil, ITN o
                      itn_native_numerals=True)                    # native digits
 ```
 
+### Tuning voice-activity detection (VAD)
+
+The server cuts the audio into speech segments with VAD. Six options tune it. Each is sent as a
+connection header and is fixed for the life of the connection (to change one, reconnect). Leave an
+option out to keep the server default. Values outside the range raise `ValueError` when the
+client is created, before anything is sent.
+
+| Option             | Header               | Default             | Range        | What it does |
+| ------------------ | -------------------- | ------------------- | ------------ | ------------ |
+| `vad_threshold`    | `x-vad-threshold`    | `0.7`               | `0.0`–`1.0`  | Speech-probability threshold. Higher rejects more noise but may miss soft speech. |
+| `min_silence_ms`   | `x-min-silence-ms`   | `500`               | `100`–`2000` | Silence after speech before a segment is closed and transcribed. The main latency knob. |
+| `min_speech_ms`    | `x-min-speech-ms`    | `100` (`200` at 8 kHz) | `50`–`2000` | Speech needed before a segment opens. Raise it in noisy rooms. |
+| `min_segment_ms`   | `x-min-segment-ms`   | `120`               | `100`–`1000` | Shorter segments are dropped without a transcript. |
+| `max_speech_s`     | `x-max-speech-s`     | no limit            | `5.0`–`120.0` | Longest a segment may run before it is cut. |
+| `idle_timeout_sec` | `x-idle-timeout-sec` | `60`                | `5`–`900`    | Seconds without speech before the server ends the session. |
+
+```python
+# Faster final transcripts on a clean line (may split a sentence at a pause)
+GnaniSTTStreamClient(language_code="hi-IN", vad_threshold=0.5, min_silence_ms=300)
+
+# Noisy call: stricter detection, longer pauses allowed, one-minute segment cap
+GnaniSTTStreamClient(language_code="en-IN", sample_rate=8000,
+                     vad_threshold=0.75, min_speech_ms=300, max_speech_s=60.0)
+```
+
+The ranges are available as `gnani.stt.STREAM_TUNING_OPTIONS`, and
+`gnani.stt.validate_stream_tuning(name, value)` checks one value.
+
 ### Using 8 kHz audio
 
 ```python

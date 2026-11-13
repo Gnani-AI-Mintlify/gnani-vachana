@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **VAD tuning for the Realtime STT stream (VAC-561).** `GnaniSTTStreamClient` takes six new options, sent as connection headers: `vad_threshold` (`x-vad-threshold`, 0.0-1.0), `min_silence_ms` (`x-min-silence-ms`, 100-2000), `min_speech_ms` (`x-min-speech-ms`, 50-2000), `min_segment_ms` (`x-min-segment-ms`, 100-1000), `max_speech_s` (`x-max-speech-s`, 5.0-120.0) and `idle_timeout_sec` (`x-idle-timeout-sec`, 5-900). Omitted options send nothing and keep the server default. Out-of-range or wrongly typed values (a `bool` is never accepted) raise `ValueError` from the constructor. Names, types and ranges match the LiveKit plugin. The ranges are exported as `gnani.stt.STREAM_TUNING_OPTIONS` (with `StreamTuningOption`) and a single value is checked by `gnani.stt.validate_stream_tuning()`, so downstream plugins can reuse them.
+
 - **LLM client (`gnani.llm`)** for the chat completions API (`POST /v1/chat/completions`, default model `gnani-evon-v3`).
   - `GnaniLLMClient.chat()` returns a whole completion; `chat_stream()` yields `chat.completion.chunk` dicts over SSE (with `include_usage`). Supports `tools` / `tool_choice`, `response_format`, sampling options and `extra_body`.
   - `stream` is always sent explicitly, so results do not depend on the server's default.

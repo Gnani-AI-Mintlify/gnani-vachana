@@ -27,6 +27,7 @@ from gnani.stt.client import (
     STREAM_CHUNK_SAMPLES,
     STREAM_SUPPORTED_LANGUAGES,
     STREAM_SUPPORTED_SAMPLE_RATES,
+    STREAM_TUNING_OPTIONS,
     SUPPORTED_LANGUAGES,
     GnaniSTTClient,
     GnaniSTTStreamClient,
@@ -35,6 +36,8 @@ from gnani.stt.client import (
     StreamEvent,
     StreamProcessingEvent,
     StreamTranscriptEvent,
+    StreamTuningOption,
+    validate_stream_tuning,
 )
 from gnani.stt.exceptions import (
     APIError,
@@ -61,6 +64,7 @@ __all__ = [
     "STREAM_CHUNK_SAMPLES",
     "STREAM_SUPPORTED_LANGUAGES",
     "STREAM_SUPPORTED_SAMPLE_RATES",
+    "STREAM_TUNING_OPTIONS",
     "SUPPORTED_LANGUAGES",
     "APIError",
     "AsyncBatchFile",
@@ -87,4 +91,6 @@ __all__ = [
     "StreamEvent",
     "StreamProcessingEvent",
     "StreamTranscriptEvent",
+    "StreamTuningOption",
+    "validate_stream_tuning",
 ]
