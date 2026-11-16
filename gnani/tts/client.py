@@ -103,6 +103,11 @@ TIMBRE_V30_VOICES = frozenset(
     {
         "Avinash", "Shivani", "Lakshmi", "Kalpana", "Shubham", "Prakash", "Devansh",
         "Yashraj", "Chetana", "Vasudha", "Riyaa", "Tarika", "Harshad",
+        # Added with VAC-584 (21 voices)
+        "Anitasingh", "Lakshmidevi", "Priyasharm", "Rahulmehta", "Vikramdasu",
+        "Sohini", "Arko", "Sunaina", "Rajeev", "Rajni", "Mahendra", "Neelam",
+        "Rakesh", "Shruthi", "Manjunath", "Rekha", "Vinod", "Santosh", "Sneha",
+        "Nitin", "Swathi",
     }
 )
 

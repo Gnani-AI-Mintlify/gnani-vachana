@@ -83,7 +83,7 @@ audio = client.synthesize(
     audio_config=AudioConfig(sample_rate=48000, encoding="linear_pcm", container="wav"),
 )
 
-# timbre-v3.0 — 13 voices, each speaks all ten languages
+# timbre-v3.0 — 34 voices, each speaks all ten languages
 audio = client.synthesize(
     "नमस्ते, आप कैसे हैं?",
     voice="Shivani",
@@ -199,7 +199,7 @@ TTS uses the **Timbre** engine. Two model IDs are supported:
 | Model | Voices | `language` / `speed` |
 |-------|--------|----------------------|
 | `timbre-v2.5` (default) | 42 voices, one preferred language each | Supported |
-| `timbre-v3.0` | 13 voices, each speaks all ten languages | Supported |
+| `timbre-v3.0` | 34 voices, each speaks all ten languages | Supported |
 
 The two models have separate voice catalogs: a voice from one is refused with the other.
 
@@ -211,7 +211,7 @@ The two models have separate voice catalogs: a voice from one is refused with th
 
 #### timbre-v3.0 voices
 
-13 voices, each speaking all ten languages: `Avinash`, `Shivani`, `Lakshmi`, `Kalpana`, `Shubham`, `Prakash`, `Devansh`, `Yashraj`, `Chetana`, `Vasudha`, `Riyaa`, `Tarika`, `Harshad`.
+34 voices, each speaking all ten languages: `Avinash`, `Shivani`, `Lakshmi`, `Kalpana`, `Shubham`, `Prakash`, `Devansh`, `Yashraj`, `Chetana`, `Vasudha`, `Riyaa`, `Tarika`, `Harshad`, `Anitasingh`, `Lakshmidevi`, `Priyasharm`, `Rahulmehta`, `Vikramdasu`, `Sohini`, `Arko`, `Sunaina`, `Rajeev`, `Rajni`, `Mahendra`, `Neelam`, `Rakesh`, `Shruthi`, `Manjunath`, `Rekha`, `Vinod`, `Santosh`, `Sneha`, `Nitin`, `Swathi`. Voice names are case-sensitive.
 
 List voices programmatically:
 
@@ -219,7 +219,7 @@ List voices programmatically:
 from gnani.tts import GnaniTTSClient
 
 print(GnaniTTSClient.supported_voices())                    # timbre-v2.5 (default), 42 voices
-print(GnaniTTSClient.supported_voices(model="timbre-v3.0")) # 13 voices
+print(GnaniTTSClient.supported_voices(model="timbre-v3.0")) # 34 voices
 ```
 
 #### Optional controls (`timbre-v2.5` and `timbre-v3.0`)
@@ -802,8 +802,8 @@ List voices for a specific model:
 from gnani.tts import GnaniTTSClient, TIMBRE_V25_VOICES, TIMBRE_V30_VOICES
 
 print(GnaniTTSClient.supported_voices())                    # 42 voices (timbre-v2.5, the default)
-print(GnaniTTSClient.supported_voices(model="timbre-v3.0")) # 13 voices
-print(len(TIMBRE_V25_VOICES), len(TIMBRE_V30_VOICES))       # 42 13
+print(GnaniTTSClient.supported_voices(model="timbre-v3.0")) # 34 voices
+print(len(TIMBRE_V25_VOICES), len(TIMBRE_V30_VOICES))       # 42 34
 ```
 
 Each voice is valid for its own model only.
