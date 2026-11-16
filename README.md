@@ -148,7 +148,7 @@ asyncio.run(main())
 
 ## LLM Chat Completions
 
-`GnaniLLMClient` and `GnaniAsyncLLMClient` call the chat completions API
+`GnaniLLMClient` and `AsyncGnaniLLMClient` call the chat completions API
 (`POST /v1/chat/completions`, default model `gnani-evon-v3`). They are the official
 [`openai`](https://pypi.org/project/openai/) client, set up for Gnani, so you use them exactly as
 you would use `OpenAI` and `AsyncOpenAI`: `client.chat.completions.create(...)`. Install the extra
@@ -197,14 +197,14 @@ for chunk in client.chat.completions.create(
 
 ### Async
 
-`GnaniAsyncLLMClient` is the same, with `await` and `async for`:
+`AsyncGnaniLLMClient` is the same, with `await` and `async for`:
 
 ```python
 import asyncio
-from gnani.llm import GnaniAsyncLLMClient
+from gnani.llm import AsyncGnaniLLMClient
 
 async def main():
-    async with GnaniAsyncLLMClient() as client:
+    async with AsyncGnaniLLMClient() as client:
         reply = await client.chat.completions.create(
             messages=[{"role": "user", "content": "Say hello in Hindi."}],
         )

@@ -7,7 +7,7 @@ from gnani.llm.client import (
     DEFAULT_BASE_URL,
     DEFAULT_MODEL,
     DEFAULT_TIMEOUT,
-    GnaniAsyncLLMClient,
+    AsyncGnaniLLMClient,
     GnaniLLMClient,
 )
 
@@ -15,6 +15,6 @@ __all__ = [
     "DEFAULT_BASE_URL",
     "DEFAULT_MODEL",
     "DEFAULT_TIMEOUT",
-    "GnaniAsyncLLMClient",
+    "AsyncGnaniLLMClient",
     "GnaniLLMClient",
 ]

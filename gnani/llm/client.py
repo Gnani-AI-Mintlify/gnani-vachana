@@ -196,7 +196,7 @@ class GnaniLLMClient(openai.OpenAI):
         self.chat = _Chat(self)  # type: ignore[assignment, misc]
 
 
-class GnaniAsyncLLMClient(openai.AsyncOpenAI):
+class AsyncGnaniLLMClient(openai.AsyncOpenAI):
     """Async client for Gnani's chat completions API.
 
     The same as :class:`GnaniLLMClient`, on ``openai.AsyncOpenAI``: calls are awaited
@@ -206,7 +206,7 @@ class GnaniAsyncLLMClient(openai.AsyncOpenAI):
     --------
     ::
 
-        client = GnaniAsyncLLMClient(api_key="key")
+        client = AsyncGnaniLLMClient(api_key="key")
 
         reply = await client.chat.completions.create(
             messages=[{"role": "user", "content": "Say hello in Hindi."}],
