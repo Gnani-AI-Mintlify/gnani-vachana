@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gnani-vachana"
-version = "0.10.0"
+version = "0.11.0"
 description = "Python client for Gnani's speech AI platform (STT, TTS, and more)"
 readme = "README.md"
 license = "MIT"
@@ -34,7 +34,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# LLM chat completions (gnani.llm) are built on the official OpenAI package.
+llm = [
+    "openai>=1.40",
+]
 dev = [
+    "openai>=1.40",
     "mypy>=1.0",
     "types-requests>=2.28",
     "pytest>=7.0",

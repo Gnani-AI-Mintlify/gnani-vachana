@@ -5,7 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.11.0] - 2026-11-17
+
+### Added
+
+- **LLM clients (`gnani.llm`) for the chat completions API (VAC-418)** (`POST /v1/chat/completions`, default model `evon-v3.5`): `GnaniLLMClient` and `AsyncGnaniLLMClient`, thin subclasses of the official `openai.OpenAI` and `openai.AsyncOpenAI`. Use `client.chat.completions.create(...)`; typed responses, streaming (`stream=True`), tools, retries (`max_retries`, default 2), timeouts and the `openai` error classes come from the `openai` package.
+  - **New optional extra:** `pip install "gnani-vachana[llm]"` (needs `openai>=1.40`). STT and TTS need nothing extra, and `import gnani` works without it; `gnani.llm` is imported on first use and says how to install the extra if `openai` is missing.
+  - **`stream=False` is the default.** The API streams unless told not to (the reverse of OpenAI), and the `openai` package leaves `stream` out when it is not set, so a plain `create()` would return raw server-sent events. The clients send `stream=False` unless you pass `stream=True`.
+  - **The gateway's error shape is kept.** A rejected key comes back as `{"detail": {"error_code", "message"}}`, which `openai` reduces to "Error code: 401". The message is restored and `error_code` is put in `e.code`.
+  - **The key is sent as `X-API-Key-ID` as well as `Authorization: Bearer`.** The production gateway reads only `X-API-Key-ID` and answers `401 MISSING_API_KEY` to a bare Bearer token, which is all `openai` sends. A `default_headers` you pass wins.
+  - `api_key` falls back to `GNANI_API_KEY` (never `OPENAI_API_KEY`); `base_url` defaults to `https://api.vachana.ai` and `/v1` is added when missing; `timeout` defaults to 120 s.
+  - The model server's extra fields (`prompt_logprobs`, `kv_transfer_params`, `stop_reason`, ...) are not removed. They stay in `model_extra` / `model_dump()`.
+
+## [0.10.0] - 2026-11-16
 
 ### Added
 
