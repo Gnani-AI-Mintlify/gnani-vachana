@@ -149,7 +149,7 @@ asyncio.run(main())
 ## LLM Chat Completions
 
 `GnaniLLMClient` and `AsyncGnaniLLMClient` call the chat completions API
-(`POST /v1/chat/completions`, default model `gnani-evon-v3`). They are the official
+(`POST /v1/chat/completions`, default model `evon-v3.5`). They are the official
 [`openai`](https://pypi.org/project/openai/) client, set up for Gnani, so you use them exactly as
 you would use `OpenAI` and `AsyncOpenAI`: `client.chat.completions.create(...)`. Install the extra
 first: `pip install "gnani-vachana[llm]"`.
@@ -172,7 +172,7 @@ print(reply.choices[0].message.content)
 print(reply.usage.total_tokens)  # also prompt_tokens, completion_tokens
 ```
 
-`reply` is the whole answer. `model` defaults to `gnani-evon-v3`, and `stream` to `False`.
+`reply` is the whole answer. `model` defaults to `evon-v3.5`, and `stream` to `False`.
 
 > **Why `stream=False`?** The Gnani API streams unless told not to, the opposite of OpenAI's, and
 > the `openai` package leaves `stream` out when you do not set it. Used directly, a plain
@@ -223,7 +223,7 @@ asyncio.run(main())
 
 ### Reasoning
 
-`gnani-evon-v3` is a reasoning model. Its thinking comes back in `message.reasoning`
+`evon-v3.5` is a reasoning model. Its thinking comes back in `message.reasoning`
 (`delta.reasoning` when streaming), before the answer in `content`. Reasoning counts against
 `max_tokens`: with a small limit the reply can end (`finish_reason == "length"`) before any
 answer, and `content` is `None`.

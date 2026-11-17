@@ -31,7 +31,7 @@ except ImportError as exc:  # pragma: no cover - exercised without the extra
     ) from exc
 
 DEFAULT_BASE_URL = "https://api.vachana.ai"
-DEFAULT_MODEL = "gnani-evon-v3"
+DEFAULT_MODEL = "evon-v3.5"
 
 # Reasoning models spend part of the budget thinking before they answer, so the first
 # byte of a plain request can be slow. This is a per-read timeout, so it also applies
